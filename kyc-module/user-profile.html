@@ -252,10 +252,13 @@
   <script>
     // Validate User Auth
     const session = requireAuth();
-    if (!session) { /* requireAuth handles redirect */ }
-    else if (session.role !== 'user') {
+    if (!session) {
+      throw new Error("Authentication required. Redirecting...");
+    }
+    if (session.role !== 'user') {
       window.location.href = 'admin-dashboard.html';
-    } else {
+      throw new Error("Unauthorized role. Redirecting...");
+    }
 
     // Theme toggler
     const themeBtn = document.getElementById('theme-toggle-btn');
@@ -531,7 +534,6 @@
       }
     });
 
-    } // end else (authenticated user)
   </script>
 </body>
 </html>

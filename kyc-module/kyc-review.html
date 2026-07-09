@@ -165,11 +165,12 @@
   <script>
     // Validate User Auth
     const session = requireAuth();
-    if (!session) { /* requireAuth handles redirect to index.html */ }
-    else {
-
+    if (!session) {
+      throw new Error("Authentication required. Redirecting...");
+    }
     if (session.role !== 'user') {
       window.location.href = 'admin-dashboard.html';
+      throw new Error("Unauthorized role. Redirecting...");
     }
 
     // Set Theme
@@ -346,8 +347,6 @@
 
       }, 1500); // 1.5s simulated processing time
     }
-
-    } // end else (authenticated user)
   </script>
 </body>
 </html>
