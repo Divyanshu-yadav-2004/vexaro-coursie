@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review KYC Details | Vexaro Admin</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <svg width="150" height="50" viewBox="0 0 240 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" onclick="window.location.href='admin-dashboard.html'" class="cursor-pointer">
+        <g transform="translate(10, 5)">
+          <circle cx="28" cy="20" r="18" fill="#e85d04" opacity="0.85"/>
+          <path d="M10 20 H46 M28 2 V38 M15 10 Q28 20 41 10 M15 30 Q28 20 41 30" stroke="#ffffff" stroke-width="1.5" fill="none"/>
+          <path d="M5 28 H30 L38 34 H44 V42 H8 V32 Z" fill="#1d3557"/>
+          <circle cx="15" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <circle cx="37" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <path d="M0 25 H8 M-4 30 H6 M-2 35 H8" stroke="#1d3557" stroke-width="2" stroke-linecap="round"/>
+        </g>
+        <text x="80" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#e85d04">VEX</text>
+        <text x="138" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#1d3557">ARO</text>
+        <text x="80" y="60" font-family="'Inter', sans-serif" font-weight="700" font-size="7.5" fill="#1d3557" letter-spacing="0.5">COURIER SOLUTION PRIVATE LIMITED</text>
+      </svg>
+    </div>
+    <div class="navbar-title hide-mobile">Verification Review Desk</div>
+    <div class="navbar-actions">
+      <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌓</button>
+      <button class="btn btn-outline btn-sm" onclick="window.location.href='admin-dashboard.html'">← Back to Panel</button>
+    </div>
+  </header>
+
+  <!-- Skeleton Container -->
+  <div id="skeleton-container" class="container page-wrapper" style="display: block;">
+    <div class="card p-6 mb-6">
+      <div class="flex gap-4">
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="flex-col w-full">
+          <div class="skeleton skeleton-title"></div>
+          <div class="skeleton skeleton-text w-1-2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="skeleton skeleton-card" style="height: 300px;"></div>
+      <div class="skeleton skeleton-card" style="height: 300px;"></div>
+    </div>
+  </div>
+
+  <!-- Real Content Area -->
+  <main id="main-content" class="container page-wrapper" style="display: none;">
+    <!-- Breadcrumb -->
+    <div class="breadcrumb">
+      <a href="admin-dashboard.html">Admin Dashboard</a>
+      <span class="breadcrumb-sep">&gt;</span>
+      <span class="text-muted" id="breadcrumb-user-name">User KYC Details</span>
+    </div>
+
+    <!-- Header Details Card -->
+    <div class="profile-header">
+      <div class="profile-banner-content">
+        <div class="flex gap-4 flex-wrap">
+          <div class="profile-avatar-wrap">
+            <div class="avatar-ring" id="user-avatar-container">
+              <!-- Avatar injected -->
+            </div>
+          </div>
+          <div class="flex-col" style="margin-top: 15px;">
+            <h1 class="profile-name" id="user-display-name">-</h1>
+            <span class="profile-email" id="user-display-email">-</span>
+          </div>
+        </div>
+        <div class="profile-meta" style="margin-top: 15px;">
+          <div id="kyc-badge-container">
+            <!-- Badge -->
+          </div>
+          <div class="text-xs text-muted" style="color:rgba(255,255,255,0.7);" id="sub-time-label">Submitted on: -</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Grid layout -->
+    <div class="grid-2">
+      <!-- Left Column: Details Cards -->
+      <div class="flex-col">
+        <!-- Personal Information Lavender Card -->
+        <div class="details-card">
+          <div class="details-card-header">
+            <span>Personal Information</span>
+          </div>
+          <div class="details-card-body">
+            <div class="details-profile-section">
+              <!-- Left: Circular Photo and Username -->
+              <div class="details-avatar-wrap">
+                <div class="details-avatar-container" id="details-avatar-box">
+                  <!-- Avatar -->
+                </div>
+                <div class="details-username" id="details-disp-username">username123</div>
+              </div>
+              
+              <!-- Middle Column -->
+              <div class="details-table">
+                <div class="details-row"><span class="details-label">First Name</span><span class="details-value" id="val-first-name">-</span></div>
+                <div class="details-row"><span class="details-label">Last Name</span><span class="details-value" id="val-last-name">-</span></div>
+                <div class="details-row"><span class="details-label">Gender</span><span class="details-value" id="val-gender">-</span></div>
+                <div class="details-row"><span class="details-label">Email</span><span class="details-value truncate" id="val-email">-</span></div>
+                <div class="details-row"><span class="details-label">Mobile</span><span class="details-value" id="val-mobile">-</span></div>
+                <div class="details-row"><span class="details-label">Agency Name</span><span class="details-value truncate" id="val-agency">-</span></div>
+                <div class="details-row"><span class="details-label">Amazon tag</span><span class="details-value" id="val-amazon-tag">-</span></div>
+              </div>
+
+              <!-- Right Column -->
+              <div class="details-table">
+                <div class="details-row"><span class="details-label">City</span><span class="details-value" id="val-city">-</span></div>
+                <div class="details-row"><span class="details-label">User Active</span><span class="details-value text-success font-bold" id="val-active">True</span></div>
+                <div class="details-row"><span class="details-label">User Approved</span><span class="details-value" id="val-approved">False</span></div>
+                <div class="details-row"><span class="details-label">Blocked</span><span class="details-value" id="val-blocked">False</span></div>
+                <div class="details-row"><span class="details-label">KYC</span><span class="details-value font-bold" id="val-kyc">-</span></div>
+                <div class="details-row"><span class="details-label">Password Reset</span><span class="details-value" id="val-pwd-reset">False</span></div>
+                <div class="details-row"><span class="details-label">Created At</span><span class="details-value" id="val-created-at">-</span></div>
+                <div class="details-row"><span class="details-label">Created By</span><span class="details-value" id="val-created-by">-</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Address Cards side by side layout -->
+        <div class="address-grid mb-6">
+          <!-- Address Card -->
+          <div class="details-card">
+            <div class="details-card-header">Address</div>
+            <div class="details-card-body">
+              <div class="details-table">
+                <div class="details-row"><span class="details-label">Address Line 1</span><span class="details-value" id="val-addr-1">-</span></div>
+                <div class="details-row"><span class="details-label">Address Line 2</span><span class="details-value" id="val-addr-2">-</span></div>
+                <div class="details-row"><span class="details-label">State</span><span class="details-value" id="val-addr-state">-</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Billing Address Card -->
+          <div class="details-card">
+            <div class="details-card-header">Billing Address</div>
+            <div class="details-card-body">
+              <div class="details-table">
+                <div class="details-row"><span class="details-label">Address Line 1</span><span class="details-value" id="val-bill-1">-</span></div>
+                <div class="details-row"><span class="details-label">Address Line 2</span><span class="details-value" id="val-bill-2">-</span></div>
+                <div class="details-row"><span class="details-label">Landmark</span><span class="details-value" id="val-bill-landmark">-</span></div>
+                <div class="details-row"><span class="details-label">City</span><span class="details-value" id="val-bill-city">-</span></div>
+                <div class="details-row"><span class="details-label">State</span><span class="details-value" id="val-bill-state">-</span></div>
+                <div class="details-row"><span class="details-label">PinCode</span><span class="details-value" id="val-bill-pincode">-</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kyc Details Card -->
+        <div class="details-card">
+          <div class="details-card-header">Kyc Details</div>
+          <div class="details-card-body">
+            <div class="grid-3" style="margin-top: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4);">
+              <!-- Aadhar Details -->
+              <div class="details-table">
+                <div class="details-card-header" style="font-size: 0.85rem; padding: 6px 12px; background: var(--surface-2); font-weight: 700; color: var(--text-2);">Aadhar Details</div>
+                <div class="details-row"><span class="details-label">Aadhar Number</span><span class="details-value font-mono" id="val-aadhar-num">-</span></div>
+              </div>
+              <!-- Pan Details -->
+              <div class="details-table">
+                <div class="details-card-header" style="font-size: 0.85rem; padding: 6px 12px; background: var(--surface-2); font-weight: 700; color: var(--text-2);">Pan Details</div>
+                <div class="details-row"><span class="details-label">Pan Number</span><span class="details-value font-mono" id="val-pan-num">-</span></div>
+              </div>
+              <!-- Bank Details -->
+              <div class="details-table">
+                <div class="details-card-header" style="font-size: 0.85rem; padding: 6px 12px; background: var(--surface-2); font-weight: 700; color: var(--text-2);">Bank Details</div>
+                <div class="details-row"><span class="details-label">Bank Name</span><span class="details-value" id="val-bank-name">-</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Verification Panel & Activity Timeline -->
+      <div class="flex-col gap-6">
+        <!-- Review Action Box -->
+        <div class="card" id="review-action-card">
+          <!-- Rendered dynamically -->
+        </div>
+
+        <!-- Verification timeline -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🕒 Verification Progress Timeline</h2>
+          </div>
+          <div class="card-body">
+            <div class="timeline" id="kyc-timeline">
+              <!-- Timeline items -->
+            </div>
+          </div>
+        </div>
+
+        <!-- User Specific Activity Log -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📋 Activity Log (This Customer)</h2>
+          </div>
+          <div class="card-body">
+            <div class="activity-list" id="user-activity-list">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Uploaded Documents Preview Row -->
+    <div class="card mt-6">
+      <div class="card-header">
+        <h2 class="card-title">📁 KYC Documents Attachment Review</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid-3" id="documents-grid">
+          <!-- Document Cards -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/toast.js"></script>
+  <script src="js/upload.js"></script>
+
+  <script>
+    // Validate Admin Session
+    requireAdmin();
+
+    // Theme toggler
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    themeBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('kyc_theme', newTheme);
+    });
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('kyc_theme') || 'light');
+
+    // Get URL Parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const kycId = urlParams.get('id');
+    
+    let currentKYC = null;
+    let targetUser = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!kycId) {
+        showToast('❌ Invalid KYC details request.', 'error');
+        setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 1500);
+        return;
+      }
+
+      setTimeout(() => {
+        loadKYCRecord();
+        document.getElementById('skeleton-container').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+      }, 800);
+    });
+
+    function loadKYCRecord() {
+      currentKYC = getKYCById(kycId);
+      if (!currentKYC) {
+        showToast('❌ KYC record not found in system.', 'error');
+        setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 1500);
+        return;
+      }
+
+      targetUser = getUserById(currentKYC.userId);
+      if (!targetUser) {
+        showToast('❌ Customer associated with this record not found.', 'error');
+        return;
+      }
+
+      // Breadcrumb Name
+      document.getElementById('breadcrumb-user-name').textContent = `${targetUser.name}'s KYC Details`;
+
+      // Header values
+      document.getElementById('user-display-name').textContent = targetUser.name;
+      document.getElementById('user-display-email').textContent = targetUser.email;
+      document.getElementById('sub-time-label').textContent = `Submitted on: ${formatDateTime(currentKYC.submittedAt)}`;
+      document.getElementById('user-avatar-container').innerHTML = createAvatarHTML(targetUser, 'xl');
+      document.getElementById('kyc-badge-container').innerHTML = getStatusBadge(currentKYC.status);
+
+      // Contact & Personal details (Reference Matching Layout)
+      document.getElementById('details-disp-username').textContent = targetUser.email.split('@')[0];
+      document.getElementById('details-avatar-box').innerHTML = createAvatarHTML(targetUser, 'xl');
+
+      document.getElementById('val-first-name').textContent = targetUser.firstName || targetUser.name.split(' ')[0] || '-';
+      document.getElementById('val-last-name').textContent = targetUser.lastName || targetUser.name.split(' ').slice(1).join(' ') || '-';
+      document.getElementById('val-gender').textContent = targetUser.gender || 'male';
+      document.getElementById('val-email').textContent = targetUser.email;
+      document.getElementById('val-mobile').textContent = targetUser.mobile;
+      document.getElementById('val-agency').textContent = targetUser.agencyName || 'Vexaro Courier and Cargo';
+      document.getElementById('val-amazon-tag').textContent = targetUser.amazonTag || 'na';
+
+      document.getElementById('val-city').textContent = targetUser.city;
+      document.getElementById('val-active').textContent = targetUser.isActive !== undefined ? (targetUser.isActive ? 'True' : 'False') : 'True';
+      document.getElementById('val-approved').textContent = targetUser.kycStatus === 'approved' ? 'True' : 'False';
+      document.getElementById('val-blocked').textContent = targetUser.isBlocked !== undefined ? (targetUser.isBlocked ? 'True' : 'False') : 'False';
+      document.getElementById('val-kyc').textContent = targetUser.kycStatus === 'approved' ? 'True' : 'False';
+      document.getElementById('val-pwd-reset').textContent = targetUser.passwordReset !== undefined ? (targetUser.passwordReset ? 'True' : 'False') : 'False';
+      document.getElementById('val-created-at').textContent = formatDate(targetUser.createdAt);
+      document.getElementById('val-created-by').textContent = targetUser.createdBy || 'superadmin';
+
+      // Set Addresses
+      document.getElementById('val-addr-1').textContent = targetUser.address || '-';
+      document.getElementById('val-addr-2').textContent = targetUser.addressLine2 || '-';
+      document.getElementById('val-addr-state').textContent = targetUser.state || '-';
+
+      document.getElementById('val-bill-1').textContent = targetUser.billAddress || '-';
+      document.getElementById('val-bill-2').textContent = targetUser.billAddress2 || '-';
+      document.getElementById('val-bill-landmark').textContent = targetUser.billLandmark || '-';
+      document.getElementById('val-bill-city').textContent = targetUser.billCity || '-';
+      document.getElementById('val-bill-state').textContent = targetUser.billState || '-';
+      document.getElementById('val-bill-pincode').textContent = targetUser.billPinCode || '-';
+
+      // Set KYC Details (raw Aadhar/PAN displayed to admin for verification)
+      document.getElementById('val-aadhar-num').textContent = targetUser.aadharNum || '-';
+      document.getElementById('val-pan-num').textContent    = targetUser.panNum || '-';
+      document.getElementById('val-bank-name').textContent  = targetUser.bankName || '-';
+
+      // Decision Box
+      renderDecisionBox();
+
+      // Timeline
+      renderTimeline();
+
+      // Documents List Cards
+      renderDocumentGrid();
+
+      // User activities log
+      renderUserActivityLogs();
+    }
+
+    function renderDecisionBox() {
+      const box = document.getElementById('review-action-card');
+      const status = currentKYC.status;
+
+      if (status === 'pending') {
+        box.className = 'card p-6 alert-info';
+        box.innerHTML = `
+          <h3 class="font-bold text-lg mb-2">📋 Pending Verification Review</h3>
+          <p class="text-sm mb-4">Evaluate the uploaded files under details section carefully. Mark approved or add a validation rejection reason.</p>
+          
+          <div class="flex gap-3 mt-4">
+            <button class="btn btn-success flex-1" onclick="approveVerificationRequest()">✅ Approve KYC</button>
+            <button class="btn btn-danger flex-1" onclick="showRejectionFields(true)">❌ Reject KYC</button>
+          </div>
+
+          <div class="reject-reason-area" id="rejection-input-area" style="display: none;">
+            <div class="divider"></div>
+            <div class="form-group">
+              <label class="form-label" for="rejection-reason-text">Provide Rejection Reason:</label>
+              <textarea id="rejection-reason-text" class="form-textarea" placeholder="e.g. PAN image is blurry or details do not match profile..."></textarea>
+              <div class="form-error" id="err-reject-reason">Please provide a valid rejection reason text.</div>
+            </div>
+            <div class="flex gap-3 justify-end">
+              <button class="btn btn-outline btn-sm" onclick="showRejectionFields(false)">Cancel</button>
+              <button class="btn btn-danger btn-sm" onclick="confirmRejectionRequest()">Confirm Rejection</button>
+            </div>
+          </div>
+        `;
+      } else if (status === 'approved') {
+        box.className = 'card p-6 alert-success';
+        box.innerHTML = `
+          <h3 class="font-bold text-lg mb-2">🟢 KYC Approved</h3>
+          <p class="text-sm">Verified by: <strong>${currentKYC.reviewedBy}</strong></p>
+          <p class="text-sm">Verified on: <strong>${formatDateTime(currentKYC.approvedOn)}</strong></p>
+          <div class="flex gap-3 mt-4">
+            <button class="btn btn-outline btn-sm" onclick="revertToPending()">🔄 Revert to Pending Verification</button>
+          </div>
+        `;
+      } else if (status === 'rejected') {
+        box.className = 'card p-6 alert-danger';
+        box.innerHTML = `
+          <h3 class="font-bold text-lg mb-2">🔴 KYC Rejected</h3>
+          <p class="text-sm">Rejected by: <strong>${currentKYC.reviewedBy || 'Owner'}</strong></p>
+          <p class="text-sm">Rejected on: <strong>${formatDateTime(currentKYC.reviewedAt)}</strong></p>
+          <div class="p-3 mt-2 rounded" style="background: rgba(239,68,68,0.1); border-left: 3px solid var(--danger);">
+            <strong>Reason for Rejection:</strong><br>
+            <span class="text-sm">${sanitizeHTML(currentKYC.rejectionReason)}</span>
+          </div>
+          <div class="flex gap-3 mt-4">
+            <button class="btn btn-outline btn-sm" onclick="revertToPending()">🔄 Revert to Pending Verification</button>
+          </div>
+        `;
+      }
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('kyc-timeline');
+      let html = '';
+      
+      currentKYC.timeline.forEach(item => {
+        let cls = 'pending';
+        if (item.status === 'completed') cls = 'completed';
+        else if (item.status === 'active') cls = 'active';
+        else if (item.status === 'rejected') cls = 'rejected';
+
+        html += `
+          <div class="timeline-item ${cls}">
+            <div class="timeline-dot"></div>
+            <div class="timeline-item-title">${item.step}</div>
+            <div class="timeline-item-date">${item.completedAt ? formatDateTime(item.completedAt) : 'Pending'}</div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function renderDocumentGrid() {
+      const container = document.getElementById('documents-grid');
+      const docs = [
+        { label: 'Aadhaar Card (Front)', key: 'aadhaarFront', icon: '📄' },
+        { label: 'Aadhaar Card (Back)', key: 'aadhaarBack', icon: '📄' },
+        { label: 'PAN Card Image', key: 'panCard', icon: '💳' }
+      ];
+
+      let html = '';
+      docs.forEach(doc => {
+        const file = currentKYC[doc.key];
+
+        // Null guard — show placeholder if document is missing
+        if (!file) {
+          html += `
+            <div class="doc-card flex-col">
+              <div class="doc-card-header">${doc.icon} ${doc.label}</div>
+              <div class="doc-card-preview" style="height:180px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); border-radius:var(--radius-md); color:var(--text-muted);">
+                📂 Not Uploaded
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        const isPDF = file.type === 'application/pdf';
+        let previewHTML = '';
+        if (isPDF) {
+          previewHTML = `
+            <div class="pdf-preview-icon" style="height:180px; justify-content:center; background:var(--surface-2); border-radius:var(--radius-md);">
+              📕<span>PDF Attachment</span>
+            </div>
+          `;
+        } else {
+          previewHTML = `
+            <img src="${file.data}" alt="${doc.label}" style="height:180px; width:100%; object-fit:cover; border-radius:var(--radius-md); cursor:pointer;" onclick="openZoom('${file.data}', '${sanitizeHTML(file.name)}')">
+          `;
+        }
+
+        html += `
+          <div class="doc-card flex-col">
+            <div class="doc-card-header">${doc.icon} ${doc.label}</div>
+            <div class="doc-card-preview">
+              ${previewHTML}
+              <div class="doc-card-overlay">
+                <button class="btn btn-sm btn-primary" onclick="openZoom('${file.data}', '${sanitizeHTML(file.name)}')">🔍 View Fullsize</button>
+              </div>
+            </div>
+            <div class="doc-card-info">
+              <div class="doc-info-row"><span class="doc-info-label">Name</span><span class="doc-info-value truncate" style="max-width: 60%;">${sanitizeHTML(file.name)}</span></div>
+              <div class="doc-info-row"><span class="doc-info-label">Size</span><span class="doc-info-value">${formatFileSize(file.size)}</span></div>
+              <div class="doc-info-row"><span class="doc-info-label">Uploaded</span><span class="doc-info-value">${formatDateTime(file.uploadedAt)}</span></div>
+            </div>
+            <div class="doc-card-actions">
+              <button class="btn btn-outline btn-sm btn-full" onclick="downloadFile('${file.data}', '${sanitizeHTML(file.name)}')">⬇️ Download File</button>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function renderUserActivityLogs() {
+      const logs = getActivityByUserId(targetUser.id);
+      const container = document.getElementById('user-activity-list');
+      if (logs.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center py-4">No logged user actions.</div>';
+        return;
+      }
+      let html = '';
+      logs.slice(0, 10).forEach(log => {
+        html += `
+          <div class="activity-item">
+            <div class="activity-icon">${log.icon || '📋'}</div>
+            <div class="activity-content">
+              <div class="activity-action">${sanitizeHTML(log.action)}</div>
+              <div class="activity-user">${timeAgo(log.timestamp)}</div>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function showRejectionFields(show) {
+      const area = document.getElementById('rejection-input-area');
+      area.style.display = show ? 'block' : 'none';
+      if (!show) {
+        document.getElementById('rejection-reason-text').value = '';
+        document.getElementById('err-reject-reason').classList.remove('show');
+      }
+    }
+
+    function approveVerificationRequest() {
+      if (!confirm(`Are you sure you want to APPROVE ${targetUser.name}'s KYC verification request?`)) return;
+
+      const now = Date.now();
+      const updatedTimeline = [
+        { step: 'Profile Completed', completedAt: targetUser.createdAt, status: 'completed' },
+        { step: 'Documents Uploaded', completedAt: currentKYC.submittedAt - 30000, status: 'completed' },
+        { step: 'Review Completed', completedAt: now - 10000, status: 'completed' },
+        { step: 'KYC Submitted', completedAt: currentKYC.submittedAt, status: 'completed' },
+        { step: 'Under Verification', completedAt: now, status: 'completed' },
+        { step: 'Approved ✓', completedAt: now, status: 'completed' }
+      ];
+
+      // Update KYC Record
+      updateKYC(currentKYC.id, {
+        status: 'approved',
+        reviewedAt: now,
+        reviewedBy: 'Owner',
+        approvedOn: now,
+        rejectionReason: null,
+        timeline: updatedTimeline
+      });
+
+      // Update User
+      updateUser(targetUser.id, { kycStatus: 'approved' });
+
+      // Logging
+      logActivity(targetUser.id, targetUser.name, 'KYC Approved by Verification Desk (Owner)', {}, '✅');
+      logActivity('admin', 'Admin', `Approved KYC for user: ${targetUser.name}`, { userId: targetUser.id }, '✅');
+
+      showToast('✅ KYC Verification Approved successfully!', 'success');
+      loadKYCRecord();
+    }
+
+    function confirmRejectionRequest() {
+      const reasonEl = document.getElementById('rejection-reason-text');
+      const errorEl = document.getElementById('err-reject-reason');
+      const reason = reasonEl.value.trim();
+
+      if (!reason) {
+        errorEl.classList.add('show');
+        return;
+      }
+      errorEl.classList.remove('show');
+
+      if (!confirm(`Are you sure you want to REJECT ${targetUser.name}'s KYC request?`)) return;
+
+      const now = Date.now();
+      const updatedTimeline = [
+        { step: 'Profile Completed', completedAt: targetUser.createdAt, status: 'completed' },
+        { step: 'Documents Uploaded', completedAt: currentKYC.submittedAt - 30000, status: 'completed' },
+        { step: 'Review Completed', completedAt: now, status: 'completed' },
+        { step: 'KYC Submitted', completedAt: currentKYC.submittedAt, status: 'completed' },
+        { step: 'Under Verification', completedAt: now, status: 'completed' },
+        { step: 'Rejected ✗', completedAt: now, status: 'rejected' }
+      ];
+
+      // Update KYC Record
+      updateKYC(currentKYC.id, {
+        status: 'rejected',
+        reviewedAt: now,
+        reviewedBy: 'Owner',
+        rejectionReason: reason,
+        timeline: updatedTimeline
+      });
+
+      // Update User Status
+      updateUser(targetUser.id, { kycStatus: 'rejected' });
+
+      // Log Activities
+      logActivity(targetUser.id, targetUser.name, `KYC Rejected by verification desk. Reason: ${reason}`, { reason }, '❌');
+      logActivity('admin', 'Admin', `Rejected KYC for user: ${targetUser.name}. Reason: ${reason}`, { userId: targetUser.id }, '❌');
+
+      showToast('❌ KYC Verification Rejected.', 'error');
+      loadKYCRecord();
+    }
+
+    function revertToPending() {
+      if (!confirm(`Revert ${targetUser.name}'s KYC status back to PENDING verification review?`)) return;
+
+      const now = Date.now();
+      const updatedTimeline = [
+        { step: 'Profile Completed', completedAt: targetUser.createdAt, status: 'completed' },
+        { step: 'Documents Uploaded', completedAt: currentKYC.submittedAt - 30000, status: 'completed' },
+        { step: 'Review Completed', completedAt: now - 10000, status: 'completed' },
+        { step: 'KYC Submitted', completedAt: currentKYC.submittedAt, status: 'completed' },
+        { step: 'Under Verification', completedAt: null, status: 'active' },
+        { step: 'Verification Decision', completedAt: null, status: 'pending' }
+      ];
+
+      // Update KYC
+      updateKYC(currentKYC.id, {
+        status: 'pending',
+        reviewedAt: null,
+        reviewedBy: null,
+        approvedOn: null,
+        rejectionReason: null,
+        timeline: updatedTimeline
+      });
+
+      // Update User
+      updateUser(targetUser.id, { kycStatus: 'pending' });
+
+      // Log activity
+      logActivity(targetUser.id, targetUser.name, 'KYC status reverted back to Pending state', {}, '⏳');
+      logActivity('admin', 'Admin', `Reverted KYC status back to pending for ${targetUser.name}`, { userId: targetUser.id }, '⏳');
+
+      showToast('⏳ KYC status reverted to Pending.', 'info');
+      loadKYCRecord();
+    }
+  </script>
+</body>
+</html>

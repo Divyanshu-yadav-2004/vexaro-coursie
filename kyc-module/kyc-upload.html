@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Documents | Vexaro KYC Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <svg width="150" height="50" viewBox="0 0 240 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" onclick="window.location.href='user-profile.html'" class="cursor-pointer">
+        <g transform="translate(10, 5)">
+          <circle cx="28" cy="20" r="18" fill="#e85d04" opacity="0.85"/>
+          <path d="M10 20 H46 M28 2 V38 M15 10 Q28 20 41 10 M15 30 Q28 20 41 30" stroke="#ffffff" stroke-width="1.5" fill="none"/>
+          <path d="M5 28 H30 L38 34 H44 V42 H8 V32 Z" fill="#1d3557"/>
+          <circle cx="15" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <circle cx="37" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <path d="M0 25 H8 M-4 30 H6 M-2 35 H8" stroke="#1d3557" stroke-width="2" stroke-linecap="round"/>
+        </g>
+        <text x="80" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#e85d04">VEX</text>
+        <text x="138" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#1d3557">ARO</text>
+        <text x="80" y="60" font-family="'Inter', sans-serif" font-weight="700" font-size="7.5" fill="#1d3557" letter-spacing="0.5">COURIER SOLUTION PRIVATE LIMITED</text>
+      </svg>
+    </div>
+    <div class="navbar-title hide-mobile" id="navbar-step-text">Step 1 of 3: Aadhaar Front</div>
+    <div class="navbar-actions">
+      <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌓</button>
+      <button class="btn btn-outline btn-sm" onclick="exitToProfile()">❌ Cancel</button>
+    </div>
+  </header>
+
+  <main class="container page-wrapper">
+    <!-- Stepper Indicator -->
+    <div class="steps">
+      <div class="step active" id="step-ind-1">
+        <div class="step-num"><span>1</span></div>
+        <div class="step-label">Aadhaar Front</div>
+      </div>
+      <div class="step" id="step-ind-2">
+        <div class="step-num"><span>2</span></div>
+        <div class="step-label">Aadhaar Back</div>
+      </div>
+      <div class="step" id="step-ind-3">
+        <div class="step-num"><span>3</span></div>
+        <div class="step-label">PAN Card</div>
+      </div>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="card max-w-lg" style="margin: 0 auto; max-width: 600px;">
+      <div class="card-header">
+        <h2 class="card-title" id="upload-card-title">📋 Aadhaar Front Side</h2>
+        <span class="badge badge-not-started" id="status-tag">Required</span>
+      </div>
+      
+      <div class="card-body">
+        <!-- Empty Upload Dropzone -->
+        <div class="upload-zone" id="drop-zone" tabindex="0" role="button" aria-label="Upload document file. Drag and drop file here or click to browse.">
+          <div class="upload-icon" id="upload-icon-graphic">📤</div>
+          <div class="upload-text-primary" id="drop-text-main">Drag & Drop file here</div>
+          <div class="upload-text-secondary">or click to browse local files</div>
+          <div class="upload-formats">JPG, JPEG, PNG, PDF (Max 5MB)</div>
+        </div>
+
+        <!-- Preview Wrapper -->
+        <div id="preview-container" style="display:none;" class="mt-4">
+          <!-- Filled dynamically by upload.js renderFilePreview -->
+        </div>
+      </div>
+
+      <div class="card-footer flex-between">
+        <button class="btn btn-outline" id="btn-prev" onclick="navigateStep(-1)" disabled>← Previous</button>
+        <button class="btn btn-primary" id="btn-next" onclick="navigateStep(1)">Next →</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/toast.js"></script>
+  <script src="js/upload.js"></script>
+
+  <script>
+    // Require User authentication
+    const session = requireAuth();
+    if (!session) { /* requireAuth handles redirect */ }
+    else if (session.role !== 'user') {
+      window.location.href = 'admin-dashboard.html';
+    } else {
+
+    // Redirect user if KYC status is already pending or approved (inside DOMContentLoaded so toast shows)
+    window.addEventListener('DOMContentLoaded', () => {
+      const currentUser = getUserById(session.userId);
+      if (currentUser && (currentUser.kycStatus === 'pending' || currentUser.kycStatus === 'approved')) {
+        showToast('⚠️ KYC already submitted. Redirecting to profile.', 'warning');
+        setTimeout(() => { window.location.href = 'user-profile.html'; }, 2000);
+        return;
+      }
+      initStep();
+    });
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    themeBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('kyc_theme', newTheme);
+    });
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('kyc_theme') || 'light');
+
+    // Steps Configuration
+    let currentStep = 1; // 1, 2, 3
+    const draftKey = 'kyc_draft_' + session.userId;
+    let isProcessingFile = false;
+    
+    // Draft schema: { aadhaarFront: { data, name, size, type, uploadedAt }, aadhaarBack: {...}, panCard: {...} }
+    let kycDraft = JSON.parse(localStorage.getItem(draftKey)) || {
+      aadhaarFront: null,
+      aadhaarBack: null,
+      panCard: null
+    };
+
+    const STEP_CONFIG = {
+      1: {
+        title: '📋 Aadhaar Card — Front Side',
+        key: 'aadhaarFront',
+        label: 'Aadhaar Front Side',
+        icon: '📋'
+      },
+      2: {
+        title: '📋 Aadhaar Card — Back Side',
+        key: 'aadhaarBack',
+        label: 'Aadhaar Back Side',
+        icon: '📋'
+      },
+      3: {
+        title: '💳 PAN Card Image',
+        key: 'panCard',
+        label: 'PAN Card Image',
+        icon: '💳'
+      }
+    };
+
+
+    function exitToProfile() {
+      if (confirm('Are you sure you want to exit? Your uploaded document drafts will be saved.')) {
+        window.location.href = 'user-profile.html';
+      }
+    }
+
+    function initStep() {
+      const config = STEP_CONFIG[currentStep];
+      
+      // Update titles
+      document.getElementById('upload-card-title').textContent = config.title;
+      document.getElementById('navbar-step-text').textContent = `Step ${currentStep} of 3: ${config.label}`;
+      document.getElementById('upload-icon-graphic').textContent = config.icon === '📋' ? '📄' : '💳';
+
+      // Stepper UI Indicators updates
+      for (let i = 1; i <= 3; i++) {
+        const stepIndicator = document.getElementById(`step-ind-${i}`);
+        stepIndicator.classList.remove('active', 'completed');
+        if (i < currentStep) {
+          stepIndicator.classList.add('completed');
+        } else if (i === currentStep) {
+          stepIndicator.classList.add('active');
+        }
+      }
+
+      // Prev Button State
+      document.getElementById('btn-prev').disabled = (currentStep === 1);
+      
+      // Next/Submit Button State text
+      const nextBtn = document.getElementById('btn-next');
+      if (currentStep === 3) {
+        nextBtn.textContent = 'Review Details →';
+      } else {
+        nextBtn.textContent = 'Next →';
+      }
+
+      // Load draft document if exists
+      const fileData = kycDraft[config.key];
+      const dropZone = document.getElementById('drop-zone');
+      const previewContainer = document.getElementById('preview-container');
+
+      if (fileData) {
+        // Render File Preview — hide the dropzone and show preview
+        dropZone.style.display = 'none';
+        previewContainer.style.display = 'block';
+
+        const mockFile = {
+          name: fileData.name,
+          size: fileData.size,
+          type: fileData.type
+        };
+        const isPDF = fileData.type === 'application/pdf';
+
+        renderFilePreview(
+          previewContainer,
+          mockFile,
+          fileData.data,
+          isPDF,
+          () => removeCurrentFile()
+        );
+        document.getElementById('status-tag').className = 'badge badge-approved';
+        document.getElementById('status-tag').textContent = 'Uploaded ✔';
+      } else {
+        // Reset the drop zone to empty state
+        previewContainer.style.display = 'none';
+        previewContainer.innerHTML = '';
+        document.getElementById('status-tag').className = 'badge badge-not-started';
+        document.getElementById('status-tag').textContent = 'Required';
+
+        // ── KEY FIX: Clone the drop-zone to strip ALL old event listeners ──
+        const freshZone = dropZone.cloneNode(false); // shallow clone preserves attrs, kills listeners
+        freshZone.innerHTML = `
+          <div class="upload-icon" id="upload-icon-graphic">${config.icon === '📋' ? '📄' : '💳'}</div>
+          <div class="upload-text-primary" id="drop-text-main">Drag &amp; Drop file here</div>
+          <div class="upload-text-secondary">or click to browse local files</div>
+          <div class="upload-formats">JPG, JPEG, PNG, PDF (Max 5MB)</div>
+        `;
+        freshZone.style.display = 'flex';
+        freshZone.className = 'upload-zone';
+        dropZone.parentNode.replaceChild(freshZone, dropZone);
+
+        // Attach file handler to the clean fresh zone
+        initUploadZone(freshZone, {
+          onFile: async (file) => {
+            const isDuplicate = checkDuplicateUpload(file.name);
+            if (isDuplicate) {
+              showToast('⚠️ Document with this file name is already uploaded in another step.', 'warning');
+              return;
+            }
+
+            // ── INSTANT PREVIEW using object URL — zero wait ──
+            const objectUrl = URL.createObjectURL(file);
+            const isPDF     = file.type === 'application/pdf';
+
+            // Save lightweight draft immediately (no base64 yet) so initStep renders preview
+            kycDraft[config.key] = {
+              data:       isPDF ? null : objectUrl,   // object URL for preview
+              base64:     null,                        // filled in background
+              name:       file.name,
+              size:       file.size,
+              type:       file.type,
+              uploadedAt: Date.now(),
+              _file:      null                         // can't persist File objects, use objectUrl
+            };
+
+            // Show preview right away — no spinner delay
+            freshZone.style.display = 'none';
+            const previewCont = document.getElementById('preview-container');
+            previewCont.style.display = 'block';
+            renderFilePreview(previewCont, file, objectUrl, isPDF, () => removeCurrentFile());
+            document.getElementById('status-tag').className  = 'badge badge-approved';
+            document.getElementById('status-tag').textContent = 'Uploaded ✔';
+            document.getElementById('navbar-step-text').textContent = `Step ${currentStep} of 3: ${config.label} ✔`;
+
+            showToast(`✅ ${config.label} uploaded!`, 'success');
+            logActivity(session.userId, session.name, `Uploaded ${config.label}: ${file.name}`, {}, '📤');
+
+            // ── Save base64 in background (non-blocking) ──
+            isProcessingFile = true;
+            compressAndGetBase64(file).then(base64 => {
+              // Persist full base64 for review/submission page
+              kycDraft[config.key].data   = base64;
+              kycDraft[config.key].base64 = base64;
+              try {
+                localStorage.setItem(draftKey, JSON.stringify(kycDraft));
+              } catch (e) {
+                // localStorage quota exceeded (very large file)
+                showToast('⚠️ File saved in memory only. Do not refresh before submitting.', 'warning');
+              }
+              isProcessingFile = false;
+            }).catch(() => {
+              showToast('⚠️ Could not save draft to disk. Please re-upload if you refresh.', 'warning');
+              isProcessingFile = false;
+            });
+          }
+        });
+      }
+    } // end initStep()
+
+
+    function checkDuplicateUpload(filename) {
+
+      // Validates name across all fields in the draft
+      for (const stepKey in kycDraft) {
+        if (kycDraft[stepKey] && kycDraft[stepKey].name === filename) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function removeCurrentFile() {
+      const config = STEP_CONFIG[currentStep];
+      if (confirm(`Remove your uploaded ${config.label}?`)) {
+        logActivity(session.userId, session.name, `Removed ${config.label} draft`, {}, '🗑️');
+        kycDraft[config.key] = null;
+        localStorage.setItem(draftKey, JSON.stringify(kycDraft));
+        showToast('🗑️ Document removed.', 'info');
+        initStep();
+      }
+    }
+
+    function navigateStep(direction) {
+      const config = STEP_CONFIG[currentStep];
+
+      // Validate on forwarding
+      if (direction === 1) {
+        if (isProcessingFile) {
+          showToast('⏳ Still processing your document. Please wait a moment...', 'info');
+          return;
+        }
+        if (!kycDraft[config.key]) {
+          showToast(`⚠️ Please upload a valid document for ${config.label} first.`, 'warning');
+          return;
+        }
+
+        if (currentStep === 3) {
+          // Go to Review
+          window.location.href = 'kyc-review.html';
+          return;
+        }
+      }
+
+      currentStep += direction;
+      initStep();
+    }
+  } // end else (authenticated user)
+  </script>
+</body>
+</html>

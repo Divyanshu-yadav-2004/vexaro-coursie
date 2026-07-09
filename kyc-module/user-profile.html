@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile | Vexaro KYC Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <!-- Vexaro SVG Logo -->
+      <svg width="150" height="50" viewBox="0 0 240 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" onclick="window.location.href='user-profile.html'" class="cursor-pointer">
+        <g transform="translate(10, 5)">
+          <circle cx="28" cy="20" r="18" fill="#e85d04" opacity="0.85"/>
+          <path d="M10 20 H46 M28 2 V38 M15 10 Q28 20 41 10 M15 30 Q28 20 41 30" stroke="#ffffff" stroke-width="1.5" fill="none"/>
+          <path d="M5 28 H30 L38 34 H44 V42 H8 V32 Z" fill="#1d3557"/>
+          <circle cx="15" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <circle cx="37" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <path d="M0 25 H8 M-4 30 H6 M-2 35 H8" stroke="#1d3557" stroke-width="2" stroke-linecap="round"/>
+        </g>
+        <text x="80" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#e85d04">VEX</text>
+        <text x="138" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#1d3557">ARO</text>
+        <text x="80" y="60" font-family="'Inter', sans-serif" font-weight="700" font-size="7.5" fill="#1d3557" letter-spacing="0.5">COURIER SOLUTION PRIVATE LIMITED</text>
+      </svg>
+    </div>
+    <div class="navbar-title hide-mobile">Customer Identity Profile</div>
+    <div class="navbar-actions">
+      <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌓</button>
+      <button class="btn btn-outline btn-sm" onclick="logout()" aria-label="Sign out">🚪 Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Skeleton Loader Page Overlay -->
+  <div id="skeleton-loader-container" class="container page-wrapper" style="display: block;">
+    <div class="card p-6 mb-6">
+      <div class="flex gap-4">
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="flex-col w-full">
+          <div class="skeleton skeleton-title"></div>
+          <div class="skeleton skeleton-text w-1-2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="grid-3 mb-6">
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+    </div>
+    <div class="grid-2">
+      <div class="skeleton skeleton-card" style="height: 300px;"></div>
+      <div class="skeleton skeleton-card" style="height: 300px;"></div>
+    </div>
+  </div>
+
+  <!-- Real Content Area -->
+  <main id="main-content" class="container page-wrapper" style="display: none;">
+    <!-- Profile Banner Card -->
+    <div class="profile-header">
+      <div class="profile-banner-content">
+        <div class="flex gap-4 flex-wrap">
+          <div class="profile-avatar-wrap">
+            <div class="avatar-ring" id="profile-avatar-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+          <div class="flex-col" style="margin-top: 15px;">
+            <h1 class="profile-name" id="user-display-name">Rahul Sharma</h1>
+            <span class="profile-email" id="user-display-email">rahul@example.com</span>
+          </div>
+        </div>
+        <div class="profile-meta" style="margin-top: 15px;">
+          <div id="kyc-badge-container">
+            <!-- Badge rendered here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div class="grid-3 mb-6">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-orange">🛡️</div>
+        <div class="stat-info">
+          <div class="stat-label">KYC Verification Status</div>
+          <div class="stat-number" style="font-size: 1.1rem; margin-top: 6px;" id="stat-kyc-status">Pending</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-blue">📅</div>
+        <div class="stat-info">
+          <div class="stat-label">Portal Registered</div>
+          <div class="stat-number" style="font-size: 1.1rem; margin-top: 6px;" id="stat-registered-date">Jul 8, 2026</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-green">⏳</div>
+        <div class="stat-info">
+          <div class="stat-label">Last User Activity</div>
+          <div class="stat-number" style="font-size: 1.1rem; margin-top: 6px;" id="stat-last-activity">Just now</div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ── Personal Information Card ── -->
+    <div class="details-card mb-6">
+      <div class="details-card-header flex-between">
+        <span>Personal Information</span>
+        <button class="btn btn-outline btn-sm" id="btn-edit-toggle" onclick="toggleEditMode()" style="background:var(--surface);border:1px solid var(--border);font-size:0.75rem;padding:4px 10px;">✏️ Edit Profile</button>
+      </div>
+      <div class="details-card-body">
+
+        <!-- View Mode -->
+        <div id="details-view-mode" class="details-profile-section">
+          <!-- Avatar + username -->
+          <div class="details-avatar-wrap">
+            <div class="details-avatar-container" id="details-avatar-box"></div>
+            <div class="details-username" id="details-disp-username">—</div>
+          </div>
+
+          <!-- Middle column -->
+          <div class="details-table">
+            <div class="details-row"><span class="details-label">First Name</span><span class="details-value" id="val-first-name">—</span></div>
+            <div class="details-row"><span class="details-label">Last Name</span><span class="details-value" id="val-last-name">—</span></div>
+            <div class="details-row"><span class="details-label">Gender</span><span class="details-value" id="val-gender">—</span></div>
+            <div class="details-row"><span class="details-label">Email</span><span class="details-value truncate" id="val-email">—</span></div>
+            <div class="details-row"><span class="details-label">Mobile</span><span class="details-value" id="val-mobile">—</span></div>
+            <div class="details-row"><span class="details-label">Agency Name</span><span class="details-value" id="val-agency">—</span></div>
+            <div class="details-row"><span class="details-label">Amazon tag</span><span class="details-value" id="val-amazon-tag">—</span></div>
+          </div>
+
+          <!-- Right column -->
+          <div class="details-table">
+            <div class="details-row"><span class="details-label">City</span><span class="details-value" id="val-city">—</span></div>
+            <div class="details-row"><span class="details-label">User Active</span><span class="details-value text-success font-bold" id="val-active">—</span></div>
+            <div class="details-row"><span class="details-label">User Approved</span><span class="details-value" id="val-approved">—</span></div>
+            <div class="details-row"><span class="details-label">Blocked</span><span class="details-value" id="val-blocked">—</span></div>
+            <div class="details-row"><span class="details-label">KYC</span><span class="details-value font-bold" id="val-kyc">—</span></div>
+            <div class="details-row"><span class="details-label">Password Reset</span><span class="details-value" id="val-pwd-reset">—</span></div>
+            <div class="details-row"><span class="details-label">Created At</span><span class="details-value" id="val-created-at">—</span></div>
+            <div class="details-row"><span class="details-label">Created By</span><span class="details-value" id="val-created-by">—</span></div>
+          </div>
+        </div>
+
+        <!-- Edit Mode Form -->
+        <form id="details-edit-mode" style="display:none;" novalidate>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label" for="edit-first-name">First Name</label><input type="text" id="edit-first-name" class="form-input" required></div>
+            <div class="form-group"><label class="form-label" for="edit-last-name">Last Name</label><input type="text" id="edit-last-name" class="form-input" required></div>
+            <div class="form-group"><label class="form-label" for="edit-gender">Gender</label>
+              <select id="edit-gender" class="form-select"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label" for="edit-mobile">Mobile Number</label><input type="tel" id="edit-mobile" class="form-input" required><div class="form-error" id="err-edit-mobile">Invalid 10-digit mobile number</div></div>
+            <div class="form-group"><label class="form-label" for="edit-agency">Agency Name</label><input type="text" id="edit-agency" class="form-input"></div>
+            <div class="form-group"><label class="form-label" for="edit-amazon">Amazon Tag</label><input type="text" id="edit-amazon" class="form-input"></div>
+          </div>
+          <div class="form-group"><label class="form-label" for="edit-address">Address</label><textarea id="edit-address" class="form-textarea" required></textarea><div class="form-error" id="err-edit-address">Address is required</div></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label" for="edit-city">City</label><input type="text" id="edit-city" class="form-input" required><div class="form-error" id="err-edit-city">Required</div></div>
+            <div class="form-group"><label class="form-label" for="edit-state">State</label><input type="text" id="edit-state" class="form-input" required><div class="form-error" id="err-edit-state">Required</div></div>
+            <div class="form-group"><label class="form-label" for="edit-pincode">Pincode</label><input type="text" id="edit-pincode" class="form-input" required maxlength="6"><div class="form-error" id="err-edit-pincode">Invalid code</div></div>
+          </div>
+          <div class="flex gap-3 justify-end mt-4">
+            <button type="button" class="btn btn-outline" onclick="toggleEditMode(false)">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-details">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Address + Billing Address Grid ── -->
+    <div class="address-grid mb-6">
+      <div class="details-card">
+        <div class="details-card-header">Address</div>
+        <div class="details-card-body">
+          <div class="details-table">
+            <div class="details-row"><span class="details-label">Address Line 1</span><span class="details-value" id="val-addr-1">—</span></div>
+            <div class="details-row"><span class="details-label">Address Line 2</span><span class="details-value" id="val-addr-2">—</span></div>
+            <div class="details-row"><span class="details-label">State</span><span class="details-value" id="val-addr-state">—</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="details-card">
+        <div class="details-card-header">Billing Address</div>
+        <div class="details-card-body">
+          <div class="details-table">
+            <div class="details-row"><span class="details-label">Address Line 1</span><span class="details-value" id="val-bill-1">—</span></div>
+            <div class="details-row"><span class="details-label">Address Line 2</span><span class="details-value" id="val-bill-2">—</span></div>
+            <div class="details-row"><span class="details-label">Landmark</span><span class="details-value" id="val-bill-landmark">—</span></div>
+            <div class="details-row"><span class="details-label">City</span><span class="details-value" id="val-bill-city">—</span></div>
+            <div class="details-row"><span class="details-label">State</span><span class="details-value" id="val-bill-state">—</span></div>
+            <div class="details-row"><span class="details-label">PinCode</span><span class="details-value" id="val-bill-pincode">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Kyc Details Card ── -->
+    <div class="details-card mb-6">
+      <div class="details-card-header">Kyc Details</div>
+      <div class="details-card-body">
+        <div class="grid-3">
+          <!-- Aadhar Details -->
+          <div class="details-table">
+            <div class="details-card-header" style="font-size: 0.85rem; padding: 6px 12px; background: var(--surface-2); font-weight: 700; color: var(--text-2);">Aadhar Details</div>
+            <div class="details-row"><span class="details-label">Aadhar Number</span><span class="details-value font-mono" id="val-aadhar-num">—</span></div>
+          </div>
+          <!-- Pan Details -->
+          <div class="details-table">
+            <div class="details-card-header" style="font-size: 0.85rem; padding: 6px 12px; background: var(--surface-2); font-weight: 700; color: var(--text-2);">Pan Details</div>
+            <div class="details-row"><span class="details-label">Pan Number</span><span class="details-value font-mono" id="val-pan-num">—</span></div>
+          </div>
+          <!-- Bank Details -->
+          <div class="details-table">
+            <div class="details-card-header" style="font-size: 0.85rem; padding: 6px 12px; background: var(--surface-2); font-weight: 700; color: var(--text-2);">Bank Details</div>
+            <div class="details-row"><span class="details-label">Bank Name</span><span class="details-value" id="val-bank-name">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── KYC Action + Timeline + Activity (centered) ── -->
+    <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:24px;">
+
+      <div class="card" id="kyc-action-card"></div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">🕒 Verification Progress</h2></div>
+        <div class="card-body"><div class="timeline" id="kyc-timeline"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">📋 Recent Activity Log</h2></div>
+        <div class="card-body"><div class="activity-list" id="activity-log-list"></div></div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/toast.js"></script>
+
+  <script>
+    // Validate User Auth
+    const session = requireAuth();
+    if (!session) { /* requireAuth handles redirect */ }
+    else if (session.role !== 'user') {
+      window.location.href = 'admin-dashboard.html';
+    } else {
+
+    // Theme toggler
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    themeBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('kyc_theme', newTheme);
+    });
+    const savedTheme = localStorage.getItem('kyc_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    let currentUser = null;
+    let currentKYC  = null;
+
+    // Load data with simulated skeleton state
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        loadUserData();
+        document.getElementById('skeleton-loader-container').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+        logActivity(session.userId, session.name, 'Viewed profile page', {}, '👤');
+      }, 1000);
+    });
+
+    function loadUserData() {
+      currentUser = getUserById(session.userId);
+      if (!currentUser) { logout(); return; }
+      currentKYC = getKYCByUserId(currentUser.id);
+
+      // Header banner
+      document.getElementById('user-display-name').textContent  = currentUser.name;
+      document.getElementById('user-display-email').textContent = currentUser.email;
+      document.getElementById('profile-avatar-container').innerHTML = createAvatarHTML(currentUser, 'xl');
+
+      // Badges & stats
+      document.getElementById('kyc-badge-container').innerHTML = getStatusBadge(currentUser.kycStatus);
+      document.getElementById('stat-kyc-status').textContent      = currentUser.kycStatus.replace('_', ' ').toUpperCase();
+      document.getElementById('stat-registered-date').textContent = formatDate(currentUser.createdAt);
+
+      const logs = getActivityByUserId(currentUser.id);
+      if (logs.length > 0) {
+        document.getElementById('stat-last-activity').textContent = timeAgo(logs[0].timestamp);
+      }
+      // ── Personal Information fields ──
+      const firstName = currentUser.firstName || currentUser.name.split(' ')[0] || '';
+      const lastName  = currentUser.lastName  || currentUser.name.split(' ').slice(1).join(' ') || '';
+      document.getElementById('details-avatar-box').innerHTML   = createAvatarHTML(currentUser, 'lg');
+      document.getElementById('details-disp-username').textContent = (currentUser.email || '').split('@')[0];
+      document.getElementById('val-first-name').textContent  = firstName  || '—';
+      document.getElementById('val-last-name').textContent   = lastName   || '—';
+      document.getElementById('val-gender').textContent      = currentUser.gender || 'male';
+      document.getElementById('val-email').textContent       = currentUser.email  || '—';
+      document.getElementById('val-mobile').textContent      = currentUser.mobile || '—';
+      document.getElementById('val-agency').textContent      = currentUser.agencyName || 'Vexaro Courier and Cargo';
+      document.getElementById('val-amazon-tag').textContent  = currentUser.amazonTag  || 'na';
+      document.getElementById('val-city').textContent        = currentUser.city || '—';
+      document.getElementById('val-active').textContent      = currentUser.isActive   !== undefined ? (currentUser.isActive   ? 'True' : 'False') : 'True';
+      document.getElementById('val-approved').textContent    = currentUser.kycStatus === 'approved' ? 'True' : 'False';
+      document.getElementById('val-blocked').textContent     = currentUser.isBlocked  !== undefined ? (currentUser.isBlocked  ? 'True' : 'False') : 'False';
+      document.getElementById('val-kyc').textContent         = currentUser.kycStatus === 'approved' ? 'True' : 'False';
+      document.getElementById('val-pwd-reset').textContent   = currentUser.passwordReset !== undefined ? (currentUser.passwordReset ? 'True' : 'False') : 'False';
+      document.getElementById('val-created-at').textContent  = formatDateTime(currentUser.createdAt);
+      document.getElementById('val-created-by').textContent  = currentUser.createdBy || 'superadmin';
+
+      // ── Address fields ──
+      document.getElementById('val-addr-1').textContent  = currentUser.address || '—';
+      document.getElementById('val-addr-2').textContent  = currentUser.addressLine2 || '—';
+      document.getElementById('val-addr-state').textContent = currentUser.state || '—';
+
+      // ── Billing Address fields ──
+      document.getElementById('val-bill-1').textContent  = currentUser.billAddress || '—';
+      document.getElementById('val-bill-2').textContent  = currentUser.billAddress2 || '—';
+      document.getElementById('val-bill-landmark').textContent = currentUser.billLandmark || '—';
+      document.getElementById('val-bill-city').textContent     = currentUser.billCity || '—';
+      document.getElementById('val-bill-state').textContent    = currentUser.billState || '—';
+      document.getElementById('val-bill-pincode').textContent  = currentUser.billPinCode || '—';
+
+      // ── Kyc Details fields ──
+      // Show secure masked representations to demonstrate handling of sensitive information
+      const rawAadhar = currentUser.aadharNum || '';
+      const rawPan = currentUser.panNum || '';
+      document.getElementById('val-aadhar-num').textContent = rawAadhar ? `XXXX-XXXX-${rawAadhar.slice(-4)}` : 'XXXX-XXXX-8921';
+      document.getElementById('val-pan-num').textContent    = rawPan ? `XXXXX${rawPan.slice(5, 9)}${rawPan.slice(-1)}` : 'XXXXX8921P';
+      document.getElementById('val-bank-name').textContent  = currentUser.bankName || 'State Bank of India';
+
+      // ── Edit form pre-fill ──
+      document.getElementById('edit-first-name').value = firstName;
+      document.getElementById('edit-last-name').value  = lastName;
+      document.getElementById('edit-gender').value     = currentUser.gender || 'male';
+      document.getElementById('edit-mobile').value     = currentUser.mobile || '';
+      document.getElementById('edit-agency').value     = currentUser.agencyName || '';
+      document.getElementById('edit-amazon').value     = currentUser.amazonTag  || '';
+      document.getElementById('edit-address').value    = currentUser.address   || '';
+      document.getElementById('edit-city').value       = currentUser.city      || '';
+      document.getElementById('edit-state').value      = currentUser.state     || '';
+      document.getElementById('edit-pincode').value    = currentUser.pincode   || '';
+
+      // ── KYC action card, timeline, activity ──
+      renderActionCard();
+      renderTimeline();
+      renderActivityList(logs);
+    }
+
+    function renderActionCard() {
+      const card   = document.getElementById('kyc-action-card');
+      const status = currentUser.kycStatus;
+
+      if (status === 'not_started') {
+        card.className = 'card p-6 alert-info';
+        card.innerHTML = `
+          <div class="flex gap-4">
+            <div style="font-size:2.5rem;">📋</div>
+            <div class="flex-col gap-2">
+              <h3 class="font-bold text-lg">Start KYC Verification</h3>
+              <p class="text-sm">Please upload your Aadhaar Card and PAN Card to unlock dispatch services.</p>
+              <button class="btn btn-primary mt-2" onclick="window.location.href='kyc-upload.html'">
+                🚀 Start Verification Process
+              </button>
+            </div>
+          </div>`;
+      } else if (status === 'pending') {
+        card.className = 'card p-6 alert-warning';
+        card.innerHTML = `
+          <div class="flex gap-4">
+            <div style="font-size:2.5rem;">⏳</div>
+            <div class="flex-col gap-2">
+              <h3 class="font-bold text-lg">Verification In Progress</h3>
+              <p class="text-sm">Your documents are under review.
+                Submitted on <strong>${formatDateTime(currentKYC ? currentKYC.submittedAt : Date.now())}</strong>.</p>
+              <button class="btn btn-outline" style="pointer-events:none;opacity:0.6;">Submission Locked</button>
+            </div>
+          </div>`;
+      } else if (status === 'approved') {
+        card.className = 'card p-6 alert-success';
+        card.innerHTML = `
+          <div class="flex gap-4">
+            <div style="font-size:2.5rem;">🎉</div>
+            <div class="flex-col gap-2">
+              <h3 class="font-bold text-lg">KYC Verified</h3>
+              <p class="text-sm">Approved by <strong>${currentKYC ? currentKYC.reviewedBy : 'Admin'}</strong>
+                on <strong>${formatDate(currentKYC ? currentKYC.approvedOn : Date.now())}</strong>.</p>
+              <div class="text-xs text-muted" style="margin-top:5px;">
+                Verification Token: ${currentKYC ? currentKYC.id : 'N/A'}
+              </div>
+            </div>
+          </div>`;
+      } else if (status === 'rejected') {
+        card.className = 'card p-6 alert-danger';
+        card.innerHTML = `
+          <div class="flex gap-4">
+            <div style="font-size:2.5rem;">❌</div>
+            <div class="flex-col gap-2 w-full">
+              <h3 class="font-bold text-lg">KYC Rejected</h3>
+              <p class="text-sm">Your verification was rejected by the verification desk.</p>
+              <div class="p-3 mt-2 rounded" style="background:rgba(239,68,68,0.1);border-left:3px solid var(--danger);">
+                <strong>Rejection Reason:</strong><br>
+                <span class="text-sm">${currentKYC && currentKYC.rejectionReason
+                  ? sanitizeHTML(currentKYC.rejectionReason) : 'Documents are invalid.'}</span>
+              </div>
+              <div class="text-xs text-muted mt-2">
+                Rejected On: ${formatDateTime(currentKYC ? currentKYC.reviewedAt : null)}
+              </div>
+              <button class="btn btn-danger mt-4" onclick="window.location.href='kyc-upload.html'">
+                🔄 Re-upload Documents
+              </button>
+            </div>
+          </div>`;
+      }
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('kyc-timeline');
+      if (!currentKYC) {
+        container.innerHTML = `
+          <div class="timeline-item completed">
+            <div class="timeline-dot"></div>
+            <div class="timeline-item-title">Profile Completed</div>
+            <div class="timeline-item-date">${formatDate(currentUser.createdAt)}</div>
+          </div>
+          <div class="timeline-item pending">
+            <div class="timeline-dot"></div>
+            <div class="timeline-item-title">Documents Uploaded</div>
+            <div class="timeline-item-date">Awaiting uploads</div>
+          </div>
+          <div class="timeline-item pending">
+            <div class="timeline-dot"></div>
+            <div class="timeline-item-title">Under Verification</div>
+            <div class="timeline-item-date">Awaiting submission</div>
+          </div>`;
+        return;
+      }
+      let html = '';
+      currentKYC.timeline.forEach(item => {
+        let cls = 'pending';
+        if (item.status === 'completed') cls = 'completed';
+        else if (item.status === 'active')   cls = 'active';
+        else if (item.status === 'rejected') cls = 'rejected';
+        html += `
+          <div class="timeline-item ${cls}">
+            <div class="timeline-dot"></div>
+            <div class="timeline-item-title">${item.step}</div>
+            <div class="timeline-item-date">${item.completedAt ? formatDateTime(item.completedAt) : 'Pending'}</div>
+          </div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function renderActivityList(logs) {
+      const container = document.getElementById('activity-log-list');
+      if (!logs || logs.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center py-4">No activities logged yet.</div>';
+        return;
+      }
+      container.innerHTML = logs.slice(0, 5).map(log => `
+        <div class="activity-item">
+          <div class="activity-icon">${log.icon || '📋'}</div>
+          <div class="activity-content">
+            <div class="activity-action">${sanitizeHTML(log.action)}</div>
+            <div class="activity-user">${timeAgo(log.timestamp)}</div>
+          </div>
+        </div>`).join('');
+    }
+
+    function toggleEditMode(forceState) {
+      const editing   = forceState !== undefined ? forceState : (document.getElementById('details-edit-mode').style.display === 'none');
+      const viewBlock = document.getElementById('details-view-mode');
+      const editBlock = document.getElementById('details-edit-mode');
+      const btn       = document.getElementById('btn-edit-toggle');
+      if (editing) {
+        viewBlock.style.display = 'none';
+        editBlock.style.display = 'block';
+        btn.textContent = '❌ Cancel';
+      } else {
+        viewBlock.style.display = 'grid';
+        editBlock.style.display = 'none';
+        btn.textContent = '✏️ Edit Profile';
+      }
+    }
+
+    document.getElementById('details-edit-mode').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const firstName  = document.getElementById('edit-first-name').value.trim();
+      const lastName   = document.getElementById('edit-last-name').value.trim();
+      const name       = `${firstName} ${lastName}`.trim();
+      const gender     = document.getElementById('edit-gender').value;
+      const mobile     = document.getElementById('edit-mobile').value.trim();
+      const agencyName = document.getElementById('edit-agency').value.trim();
+      const amazonTag  = document.getElementById('edit-amazon').value.trim();
+      const address    = document.getElementById('edit-address').value.trim();
+      const city       = document.getElementById('edit-city').value.trim();
+      const state      = document.getElementById('edit-state').value.trim();
+      const pincode    = document.getElementById('edit-pincode').value.trim();
+
+      document.querySelectorAll('.form-error').forEach(el => el.classList.remove('show'));
+      let valid = true;
+      if (!firstName || !lastName)    { showToast('⚠️ First and Last name are required.', 'warning'); valid = false; }
+      if (!validateMobile(mobile))    { document.getElementById('err-edit-mobile').classList.add('show');  valid = false; }
+      if (!address)                   { document.getElementById('err-edit-address').classList.add('show'); valid = false; }
+      if (!city)                      { document.getElementById('err-edit-city').classList.add('show');    valid = false; }
+      if (!state)                     { document.getElementById('err-edit-state').classList.add('show');   valid = false; }
+      if (!validatePincode(pincode))  { document.getElementById('err-edit-pincode').classList.add('show'); valid = false; }
+      if (!valid) { showToast('⚠️ Please fill all required fields correctly.', 'warning'); return; }
+
+      const updated = updateUser(currentUser.id, { name, firstName, lastName, gender, mobile, agencyName, amazonTag, address, city, state, pincode });
+      if (updated) {
+        session.name = name;
+        sessionStorage.setItem('kyc_session', JSON.stringify(session));
+        logActivity(currentUser.id, name, 'Updated profile details', {}, '✏️');
+        showToast('✅ Profile updated successfully!', 'success');
+        loadUserData();
+        toggleEditMode(false);
+      }
+    });
+
+    } // end else (authenticated user)
+  </script>
+</body>
+</html>
+

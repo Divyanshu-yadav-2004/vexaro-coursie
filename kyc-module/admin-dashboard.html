@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard | Vexaro KYC Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <button class="hamburger" id="hamburger-toggle" aria-label="Toggle Sidebar Menu">☰</button>
+      <svg width="150" height="50" viewBox="0 0 240 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" onclick="window.location.href='admin-dashboard.html'" class="cursor-pointer">
+        <g transform="translate(10, 5)">
+          <circle cx="28" cy="20" r="18" fill="#e85d04" opacity="0.85"/>
+          <path d="M10 20 H46 M28 2 V38 M15 10 Q28 20 41 10 M15 30 Q28 20 41 30" stroke="#ffffff" stroke-width="1.5" fill="none"/>
+          <path d="M5 28 H30 L38 34 H44 V42 H8 V32 Z" fill="#1d3557"/>
+          <circle cx="15" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <circle cx="37" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <path d="M0 25 H8 M-4 30 H6 M-2 35 H8" stroke="#1d3557" stroke-width="2" stroke-linecap="round"/>
+        </g>
+        <text x="80" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#e85d04">VEX</text>
+        <text x="138" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#1d3557">ARO</text>
+        <text x="80" y="60" font-family="'Inter', sans-serif" font-weight="700" font-size="7.5" fill="#1d3557" letter-spacing="0.5">COURIER SOLUTION PRIVATE LIMITED</text>
+      </svg>
+    </div>
+    <div class="navbar-title hide-mobile">Owner Administration Desk</div>
+    <div class="navbar-actions">
+      <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌓</button>
+      <button class="btn btn-outline btn-sm" onclick="logout()">🚪 Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Sidebar overlay for Mobile -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebarMenu(false)"></div>
+
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-nav">
+      <a href="admin-dashboard.html" class="sidebar-item active">
+        <span class="si-icon">🏠</span> Dashboard
+      </a>
+      <a href="#table-section" class="sidebar-item" onclick="setFilter('all')">
+        <span class="si-icon">👥</span> All Requests
+      </a>
+      <a href="#table-section" class="sidebar-item" onclick="setFilter('pending')">
+        <span class="si-icon">⏳</span> Pending KYC
+      </a>
+      <a href="#table-section" class="sidebar-item" onclick="setFilter('approved')">
+        <span class="si-icon">✅</span> Approved
+      </a>
+      <a href="#table-section" class="sidebar-item" onclick="setFilter('rejected')">
+        <span class="si-icon">❌</span> Rejected
+      </a>
+      <a href="#logs-section" class="sidebar-item">
+        <span class="si-icon">📋</span> System Log
+      </a>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sidebar-admin-info">
+        <div class="avatar-placeholder avatar-sm" style="background:var(--primary-dark)">AD</div>
+        <div class="flex-col">
+          <span class="font-bold text-xs">Vexaro Admin</span>
+          <span class="text-xs text-muted">admin@kycportal.com</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Skeleton Loader for admin stats -->
+  <div id="skeleton-container" class="page-wrapper with-sidebar container" style="display: block;">
+    <div class="grid-6 mb-6">
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+    </div>
+    <div class="grid-2 mb-6">
+      <div class="skeleton skeleton-card" style="height: 180px;"></div>
+      <div class="skeleton skeleton-card" style="height: 180px;"></div>
+    </div>
+    <div class="skeleton skeleton-row" style="height: 400px;"></div>
+  </div>
+
+  <!-- Real Content Area -->
+  <main id="main-content" class="page-wrapper with-sidebar container" style="display: none;">
+    <!-- Stats Cards Row -->
+    <div class="grid-6 mb-6">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-blue">👥</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-total-users">0</div>
+          <div class="stat-label">Total Users</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-amber">⏳</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-pending">0</div>
+          <div class="stat-label">Pending Verification</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-green">✅</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-approved">0</div>
+          <div class="stat-label">Approved</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-red">❌</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-rejected">0</div>
+          <div class="stat-label">Rejected</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-orange">⚡</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-today">0</div>
+          <div class="stat-label">Today's Requests</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-purple">📅</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-month">0</div>
+          <div class="stat-label">This Month</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid-2 mb-6">
+      <!-- Status Distribution Bar Chart -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">📊 KYC Status Distribution</h3>
+        </div>
+        <div class="card-body">
+          <div class="chart-row">
+            <div class="chart-bar-item">
+              <div class="chart-bar-label">Pending</div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill amber" id="bar-pending-fill"></div>
+              </div>
+              <div class="chart-bar-value" id="val-pending-bar">0 (0%)</div>
+            </div>
+            <div class="chart-bar-item">
+              <div class="chart-bar-label">Approved</div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill green" id="bar-approved-fill"></div>
+              </div>
+              <div class="chart-bar-value" id="val-approved-bar">0 (0%)</div>
+            </div>
+            <div class="chart-bar-item">
+              <div class="chart-bar-label">Rejected</div>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill red" id="bar-rejected-fill"></div>
+              </div>
+              <div class="chart-bar-value" id="val-rejected-bar">0 (0%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trend Chart -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">📈 Submission Trend (Last 7 Days)</h3>
+        </div>
+        <div class="card-body" style="padding-bottom:10px;">
+          <div class="trend-chart" id="trend-chart-container">
+            <!-- Bars rendered by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KYC Requests Table Card -->
+    <div class="card mb-6" id="table-section">
+      <div class="card-header">
+        <h3 class="card-title">👥 KYC Registration Requests</h3>
+        <div class="dropdown" id="export-dropdown">
+          <button class="btn btn-outline btn-sm" onclick="toggleExportMenu()">⬇️ Export Reports</button>
+          <div class="dropdown-menu">
+            <div class="dropdown-item" onclick="exportData('csv')">📄 Download CSV File</div>
+            <div class="dropdown-item" onclick="exportData('excel')">📊 Download Excel Sheet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters & Sorting Controls -->
+      <div class="card-body" style="padding-bottom: 0;">
+        <div class="controls-row-2">
+          <!-- Search Bar -->
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-input" class="form-input search-input" placeholder="Search by name, email or mobile..." oninput="handleSearchInput(event)">
+          </div>
+
+          <!-- Sort filter selection -->
+          <div class="flex gap-3 align-center">
+            <span class="text-sm font-semibold">Sort By:</span>
+            <select id="sort-select" class="sort-select" onchange="handleSortChange(event)">
+              <option value="latest">Latest Submissions</option>
+              <option value="oldest">Oldest Submissions</option>
+              <option value="name">Name (A-Z)</option>
+              <option value="status">Verification Status</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="controls-row">
+          <!-- Filter Tabs -->
+          <div class="filter-tabs" id="filter-tabs">
+            <button class="filter-tab active" data-filter="all" onclick="setFilter('all')">All Records</button>
+            <button class="filter-tab" data-filter="pending" onclick="setFilter('pending')">⏳ Pending Verification</button>
+            <button class="filter-tab" data-filter="approved" onclick="setFilter('approved')">✅ Approved</button>
+            <button class="filter-tab" data-filter="rejected" onclick="setFilter('rejected')">❌ Rejected</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table Wrapper -->
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Customer details</th>
+              <th>Mobile</th>
+              <th>Email</th>
+              <th>KYC Status</th>
+              <th>Submission Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <!-- Rows rendered dynamically -->
+          </tbody>
+        </table>
+
+        <!-- Empty State inside table -->
+        <div class="empty-state" id="empty-state" style="display: none;">
+          <div class="empty-icon">📂</div>
+          <div class="empty-title">No KYC requests found</div>
+          <div class="empty-desc">Adjust your filters or query text and try search query again.</div>
+        </div>
+
+        <!-- Pagination UI footer wrapper -->
+        <div class="pagination-wrap" id="pagination-wrap">
+          <div class="page-info" id="pagination-info">Showing 1-10 of 100 entries</div>
+          <div class="pagination" id="pagination-buttons">
+            <!-- Buttons injected by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Activity Log Card -->
+    <div class="card mb-6" id="logs-section">
+      <div class="card-header">
+        <h3 class="card-title">📋 Global System Activity logs</h3>
+      </div>
+      <div class="card-body">
+        <div class="activity-list" id="global-activity-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/toast.js"></script>
+
+  <script>
+    // Validate Admin Session
+    requireAdmin();
+
+    // Theme toggler
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    themeBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('kyc_theme', newTheme);
+    });
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('kyc_theme') || 'light');
+
+    // Sidebar Mobile Toggle
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    const hamburger = document.getElementById('hamburger-toggle');
+    hamburger.addEventListener('click', () => toggleSidebarMenu(true));
+
+    function toggleSidebarMenu(show) {
+      if (show) {
+        sidebar.classList.add('open');
+        overlay.classList.add('open');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+      }
+    }
+
+    // State Variables
+    let usersList = [];
+    let kycRecordsList = [];
+    let filteredRecords = [];
+    
+    // Pagination configurations
+    let currentPage = 1;
+    const itemsPerPage = 10;
+
+    // Search and filters
+    let currentFilter = 'all'; // 'all', 'pending', 'approved', 'rejected'
+    let searchQuery = '';
+    let currentSort = 'latest'; // 'latest', 'oldest', 'name', 'status'
+
+    // Load elements with simulated loader
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        loadDashboardData();
+        document.getElementById('skeleton-container').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+        
+        // Initial charts animation trigger
+        animateCharts();
+      }, 800);
+    });
+
+    function loadDashboardData() {
+      // Reload raw records
+      usersList = getUsers().filter(u => u.role !== 'admin');
+      kycRecordsList = getKYCRecords();
+
+      // Set Cards numbers
+      const stats = getKYCStats();
+      document.getElementById('card-total-users').textContent = usersList.length;
+      document.getElementById('card-pending').textContent = stats.pending;
+      document.getElementById('card-approved').textContent = stats.approved;
+      document.getElementById('card-rejected').textContent = stats.rejected;
+      document.getElementById('card-today').textContent = stats.today;
+      document.getElementById('card-month').textContent = stats.thisMonth;
+
+      // Update Chart labels text
+      const totalKYC = stats.pending + stats.approved + stats.rejected || 1;
+      const getPerc = (val) => Math.round((val / totalKYC) * 100);
+
+      document.getElementById('val-pending-bar').textContent = `${stats.pending} (${getPerc(stats.pending)}%)`;
+      document.getElementById('val-approved-bar').textContent = `${stats.approved} (${getPerc(stats.approved)}%)`;
+      document.getElementById('val-rejected-bar').textContent = `${stats.rejected} (${getPerc(stats.rejected)}%)`;
+
+      // Set Chart Bar widths targets
+      document.getElementById('bar-pending-fill').style.setProperty('--target-width', `${getPerc(stats.pending)}%`);
+      document.getElementById('bar-approved-fill').style.setProperty('--target-width', `${getPerc(stats.approved)}%`);
+      document.getElementById('bar-rejected-fill').style.setProperty('--target-width', `${getPerc(stats.rejected)}%`);
+
+      // Seed & render Trend bars
+      renderTrendChart();
+
+      // Filter and render Table lists
+      applyFilters();
+
+      // Render Global logs
+      renderGlobalLogs();
+    }
+
+    function animateCharts() {
+      // Animate Status Distribution
+      ['pending', 'approved', 'rejected'].forEach(status => {
+        const fill = document.getElementById(`bar-${status}-fill`);
+        const width = fill.style.getPropertyValue('--target-width') || '0%';
+        fill.style.width = width;
+      });
+
+      // Animate Trend Chart bars
+      document.querySelectorAll('.trend-bar').forEach(bar => {
+        const height = bar.getAttribute('data-height');
+        bar.style.height = height;
+      });
+    }
+
+    function renderTrendChart() {
+      const container = document.getElementById('trend-chart-container');
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      
+      // Seeded random counts for visually pleasing demo charts
+      let html = '';
+      days.forEach((day, idx) => {
+        const count = [3, 5, 2, 8, 4, 6, 9][idx]; // Seeded mockup counts
+        const percent = Math.min(100, Math.max(5, (count / 10) * 100));
+
+        html += `
+          <div class="trend-bar-wrap">
+            <div class="trend-bar" data-height="${percent}%" style="height: 0px;" title="${count} submissions"></div>
+            <span class="trend-bar-label">${day}</span>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function applyFilters() {
+      // Link users with their KYC submissions
+      let records = [];
+
+      usersList.forEach(user => {
+        const kyc = kycRecordsList.find(k => k.userId === user.id);
+        records.push({
+          user: user,
+          kyc: kyc,
+          // Fallback timestamp values for sorting
+          timestamp: kyc ? kyc.submittedAt : user.createdAt,
+          status: user.kycStatus
+        });
+      });
+
+      // 1. Search Query Filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        records = records.filter(r => 
+          r.user.name.toLowerCase().includes(q) ||
+          r.user.email.toLowerCase().includes(q) ||
+          r.user.mobile.includes(q)
+        );
+      }
+
+      // 2. Status Category Filter
+      if (currentFilter !== 'all') {
+        records = records.filter(r => r.status === currentFilter);
+      }
+
+      // 3. Sort Order
+      if (currentSort === 'latest') {
+        records.sort((a, b) => b.timestamp - a.timestamp);
+      } else if (currentSort === 'oldest') {
+        records.sort((a, b) => a.timestamp - b.timestamp);
+      } else if (currentSort === 'name') {
+        records.sort((a, b) => a.user.name.localeCompare(b.user.name));
+      } else if (currentSort === 'status') {
+        records.sort((a, b) => a.status.localeCompare(b.status));
+      }
+
+      filteredRecords = records;
+      currentPage = 1; // Reset page
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('table-body');
+      const emptyState = document.getElementById('empty-state');
+      const paginationWrap = document.getElementById('pagination-wrap');
+
+      if (filteredRecords.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'flex';
+        paginationWrap.style.display = 'none';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      paginationWrap.style.display = 'flex';
+
+      // Slice items for pagination
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, filteredRecords.length);
+      const paginatedItems = filteredRecords.slice(startIndex, endIndex);
+
+      let html = '';
+      paginatedItems.forEach((item, index) => {
+        const globalIndex = startIndex + index + 1;
+        const subDate = item.kyc ? formatDateTime(item.kyc.submittedAt) : 'Not Submitted';
+        
+        // Actions details link
+        const actionBtn = item.kyc 
+          ? `<button class="btn btn-outline-primary btn-sm" onclick="viewKYCDetails('${item.kyc.id}')">🔍 View Details</button>`
+          : `<span class="text-muted text-xs">No documents uploaded</span>`;
+
+        html += `
+          <tr class="fade-in" style="animation-delay: ${index * 0.05}s">
+            <td>${globalIndex}</td>
+            <td>
+              <div class="table-user-cell">
+                <div class="table-avatar">
+                  ${createAvatarHTML(item.user, 'sm')}
+                </div>
+                <div class="flex-col">
+                  <span class="font-bold truncate" style="max-width:180px;">${sanitizeHTML(item.user.name)}</span>
+                  <span class="text-xs text-muted">ID: ${item.user.id.slice(0,8)}...</span>
+                </div>
+              </div>
+            </td>
+            <td>${item.user.mobile}</td>
+            <td class="truncate" style="max-width: 180px;">${item.user.email}</td>
+            <td>${getStatusBadge(item.status)}</td>
+            <td>${subDate}</td>
+            <td>${actionBtn}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+
+      // Update Pagination info
+      document.getElementById('pagination-info').textContent = 
+        `Showing ${startIndex + 1}–${endIndex} of ${filteredRecords.length} entries`;
+
+      renderPaginationButtons();
+    }
+
+    function renderPaginationButtons() {
+      const container = document.getElementById('pagination-buttons');
+      const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+      
+      if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+      }
+
+      let html = '';
+      
+      // Prev Button
+      html += `<button class="page-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>&lt;</button>`;
+
+      for (let i = 1; i <= totalPages; i++) {
+        // Simple page buttons list
+        const activeCls = i === currentPage ? 'active' : '';
+        html += `<button class="page-btn ${activeCls}" onclick="changePage(${i})">${i}</button>`;
+      }
+
+      // Next Button
+      html += `<button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>&gt;</button>`;
+
+      container.innerHTML = html;
+    }
+
+    function changePage(page) {
+      currentPage = page;
+      renderTable();
+      document.getElementById('table-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Realtime search text input
+    const handleSearchInput = debounce((e) => {
+      searchQuery = e.target.value.trim();
+      applyFilters();
+    }, 300);
+
+    // Filters switcher tabs
+    function setFilter(filter) {
+      currentFilter = filter;
+      toggleSidebarMenu(false); // Close mobile menu
+
+      // Update tabs layout
+      document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.classList.remove('active');
+        if (tab.getAttribute('data-filter') === filter) {
+          tab.classList.add('active');
+        }
+      });
+      
+      applyFilters();
+    }
+
+    function handleSortChange(e) {
+      currentSort = e.target.value;
+      applyFilters();
+    }
+
+    function viewKYCDetails(kycId) {
+      window.location.href = `admin-detail.html?id=${kycId}`;
+    }
+
+    function toggleExportMenu() {
+      document.getElementById('export-dropdown').classList.toggle('open');
+    }
+
+    // Close export dropdown when clicking elsewhere
+    window.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('export-dropdown');
+      if (dropdown && !dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    // Activity list loader
+    function renderGlobalLogs() {
+      const logs = getRecentActivity(10);
+      const container = document.getElementById('global-activity-list');
+      if (logs.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center py-4">No global logs recorded.</div>';
+        return;
+      }
+
+      let html = '';
+      logs.forEach(log => {
+        html += `
+          <div class="activity-item">
+            <div class="activity-icon">${log.icon || '📋'}</div>
+            <div class="activity-content">
+              <div class="activity-action">
+                <strong>${sanitizeHTML(log.userName)}</strong>: ${sanitizeHTML(log.action)}
+              </div>
+              <div class="activity-user">${timeAgo(log.timestamp)} • User ID: ${log.userId}</div>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    // Export Excel & CSV Functions
+    function exportData(format) {
+      toggleExportMenu();
+      if (filteredRecords.length === 0) {
+        showToast('⚠️ No records available to export.', 'warning');
+        return;
+      }
+
+      let fileContent = '';
+      let filename = `Vexaro_KYC_Export_${new Date().toISOString().split('T')[0]}`;
+      
+      if (format === 'csv') {
+        // CSV Generation
+        const headers = ['User ID', 'Full Name', 'Email', 'Mobile', 'KYC Status', 'Submitted At'];
+        const rows = filteredRecords.map(r => [
+          r.user.id,
+          r.user.name,
+          r.user.email,
+          r.user.mobile,
+          r.status.toUpperCase(),
+          r.kyc ? new Date(r.kyc.submittedAt).toLocaleString() : 'N/A'
+        ]);
+        
+        fileContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))].join('\n');
+        downloadFile('data:text/csv;charset=utf-8,' + encodeURIComponent(fileContent), filename + '.csv');
+        showToast('✅ CSV report exported successfully!', 'success');
+      } else {
+        // HTML table-based mock Excel file (standard browser compatible xls trick)
+        let tableHTML = `<table border="1"><thead><tr><th>User ID</th><th>Full Name</th><th>Email</th><th>Mobile</th><th>KYC Status</th><th>Submitted At</th></tr></thead><tbody>`;
+        
+        filteredRecords.forEach(r => {
+          tableHTML += `<tr>
+            <td>${r.user.id}</td>
+            <td>${sanitizeHTML(r.user.name)}</td>
+            <td>${r.user.email}</td>
+            <td>${r.user.mobile}</td>
+            <td>${r.status.toUpperCase()}</td>
+            <td>${r.kyc ? new Date(r.kyc.submittedAt).toLocaleString() : 'N/A'}</td>
+          </tr>`;
+        });
+        tableHTML += '</tbody></table>';
+
+        const excelBlob = 'data:application/vnd.ms-excel;charset=utf-8,' + encodeURIComponent(tableHTML);
+        downloadFile(excelBlob, filename + '.xls');
+        showToast('✅ Excel spreadsheet exported successfully!', 'success');
+      }
+
+      logActivity('admin', 'Admin', `Exported ${filteredRecords.length} records in ${format.toUpperCase()} format`, {}, '📊');
+    }
+  </script>
+</body>
+</html>

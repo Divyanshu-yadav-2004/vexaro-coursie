@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review & Submit KYC | Vexaro KYC Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <svg width="150" height="50" viewBox="0 0 240 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" onclick="window.location.href='user-profile.html'" class="cursor-pointer">
+        <g transform="translate(10, 5)">
+          <circle cx="28" cy="20" r="18" fill="#e85d04" opacity="0.85"/>
+          <path d="M10 20 H46 M28 2 V38 M15 10 Q28 20 41 10 M15 30 Q28 20 41 30" stroke="#ffffff" stroke-width="1.5" fill="none"/>
+          <path d="M5 28 H30 L38 34 H44 V42 H8 V32 Z" fill="#1d3557"/>
+          <circle cx="15" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <circle cx="37" cy="42" r="4" fill="#ffffff" stroke="#1d3557" stroke-width="2"/>
+          <path d="M0 25 H8 M-4 30 H6 M-2 35 H8" stroke="#1d3557" stroke-width="2" stroke-linecap="round"/>
+        </g>
+        <text x="80" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#e85d04">VEX</text>
+        <text x="138" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="28" fill="#1d3557">ARO</text>
+        <text x="80" y="60" font-family="'Inter', sans-serif" font-weight="700" font-size="7.5" fill="#1d3557" letter-spacing="0.5">COURIER SOLUTION PRIVATE LIMITED</text>
+      </svg>
+    </div>
+    <div class="navbar-title hide-mobile">Final Step: Review Details</div>
+    <div class="navbar-actions">
+      <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌓</button>
+      <button class="btn btn-outline btn-sm" onclick="window.location.href='user-profile.html'">❌ Cancel</button>
+    </div>
+  </header>
+
+  <main class="container page-wrapper">
+    <h1 class="font-bold text-lg mb-2">🔎 Review & Submit KYC</h1>
+    <p class="text-sm text-muted mb-6">Please carefully verify your details and uploaded document images before final submission.</p>
+
+    <!-- Two-column Review layout -->
+    <div class="grid-2">
+      <!-- Left Column: Personal Information Card -->
+      <div class="card flex-col">
+        <div class="card-header">
+          <h2 class="card-title">👤 Personal Details Summary</h2>
+          <button class="btn btn-outline btn-sm" onclick="window.location.href='user-profile.html'">✏️ Edit</button>
+        </div>
+        <div class="card-body flex-col gap-4">
+          <div class="info-row">
+            <div class="info-icon">👤</div>
+            <div>
+              <div class="info-label">Full Name</div>
+              <div class="info-value" id="disp-name">-</div>
+            </div>
+          </div>
+          <div class="info-row">
+            <div class="info-icon">✉️</div>
+            <div>
+              <div class="info-label">Email Address</div>
+              <div class="info-value" id="disp-email">-</div>
+            </div>
+          </div>
+          <div class="info-row">
+            <div class="info-icon">📱</div>
+            <div>
+              <div class="info-label">Mobile Number</div>
+              <div class="info-value" id="disp-mobile">-</div>
+            </div>
+          </div>
+          <div class="info-row">
+            <div class="info-icon">📍</div>
+            <div>
+              <div class="info-label">Address details</div>
+              <div class="info-value" id="disp-address">-</div>
+            </div>
+          </div>
+          <div class="grid-3" style="border-top:1px solid var(--border); padding-top:var(--space-3);">
+            <div>
+              <div class="info-label">City</div>
+              <div class="info-value" id="disp-city">-</div>
+            </div>
+            <div>
+              <div class="info-label">State</div>
+              <div class="info-value" id="disp-state">-</div>
+            </div>
+            <div>
+              <div class="info-label">Pincode</div>
+              <div class="info-value" id="disp-pincode">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Verification consent & Actions -->
+      <div class="card flex-col">
+        <div class="card-header">
+          <h2 class="card-title">📄 Declaration & Submit</h2>
+        </div>
+        <div class="card-body flex-col gap-4">
+          <div class="alert alert-warning">
+            <div class="alert-icon">⚠️</div>
+            <div class="alert-body">
+              <div class="alert-title">Irreversible Action</div>
+              <div class="text-sm">Once submitted, you will not be allowed to modify your documents or profile until our verification desk completes the review.</div>
+            </div>
+          </div>
+
+          <!-- Consent Checkbox -->
+          <div class="form-group mt-4">
+            <label class="flex gap-3 cursor-pointer" style="align-items: flex-start;">
+              <input type="checkbox" id="consent-check" class="mt-1" style="transform: scale(1.2);">
+              <span class="text-sm">
+                I hereby declare that the documents and details provided belong to me and are authentic, valid, and legible. I authorize Vexaro to verify this information.
+              </span>
+            </label>
+            <div class="form-error" id="err-consent">Please review and check the declaration checkbox.</div>
+          </div>
+        </div>
+        <div class="card-footer flex gap-3 justify-end">
+          <button class="btn btn-outline" onclick="window.location.href='kyc-upload.html'">✏️ Edit Docs</button>
+          <button class="btn btn-primary" id="btn-submit-kyc" onclick="triggerSubmitConfirmation()">Submit KYC for Approval</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full-width: Document Grid Card -->
+    <div class="card mt-6">
+      <div class="card-header">
+        <h2 class="card-title">📁 Uploaded KYC Documents</h2>
+        <button class="btn btn-outline btn-sm" onclick="window.location.href='kyc-upload.html'">🔄 Re-upload Docs</button>
+      </div>
+      <div class="card-body">
+        <div class="grid-3" id="documents-preview-grid">
+          <!-- Document Cards populated by JS -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Confirmation Modal Dialog -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title font-bold text-lg text-warning">⚠️ Confirm KYC Submission</h3>
+        <span class="modal-close" onclick="closeConfirmationModal()">×</span>
+      </div>
+      <div class="modal-body flex-col gap-4 text-center">
+        <div class="modal-icon text-warning">📦</div>
+        <h4 class="font-bold">Are you sure you want to submit your KYC?</h4>
+        <p class="modal-description">Your profile details and uploaded files will be locked under pending verification state. You won't be able to edit them until reviewed.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeConfirmationModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-modal-confirm" onclick="processKYCSubmission()">Yes, Submit KYC</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/toast.js"></script>
+  <script src="js/upload.js"></script>
+
+  <script>
+    // Validate User Auth
+    const session = requireAuth();
+    if (!session) { /* requireAuth handles redirect to index.html */ }
+    else {
+
+    if (session.role !== 'user') {
+      window.location.href = 'admin-dashboard.html';
+    }
+
+    // Set Theme
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    themeBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('kyc_theme', newTheme);
+    });
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('kyc_theme') || 'light');
+
+    let currentUser = getUserById(session.userId);
+    const draftKey = 'kyc_draft_' + session.userId;
+    let kycDraft = JSON.parse(localStorage.getItem(draftKey));
+
+    window.addEventListener('DOMContentLoaded', () => {
+      // Guard: If draft is missing or documents are not uploaded, redirect to upload page
+      if (!kycDraft || !kycDraft.aadhaarFront || !kycDraft.aadhaarBack || !kycDraft.panCard) {
+        showToast('⚠️ Please upload all required documents first.', 'warning');
+        setTimeout(() => { window.location.href = 'kyc-upload.html'; }, 2000);
+        return;
+      }
+      renderReviewDetails();
+    });
+
+    function renderReviewDetails() {
+      if (!currentUser) return;
+
+      // Render Personal Info Summary
+      document.getElementById('disp-name').textContent = currentUser.name;
+      document.getElementById('disp-email').textContent = currentUser.email;
+      document.getElementById('disp-mobile').textContent = currentUser.mobile;
+      document.getElementById('disp-address').textContent = currentUser.address;
+      document.getElementById('disp-city').textContent = currentUser.city;
+      document.getElementById('disp-state').textContent = currentUser.state;
+      document.getElementById('disp-pincode').textContent = currentUser.pincode;
+
+      // Render Uploaded Documents Grid
+      const grid = document.getElementById('documents-preview-grid');
+      let gridHTML = '';
+
+      const DOCS = [
+        { label: 'Aadhaar Card (Front)', key: 'aadhaarFront', icon: '📄' },
+        { label: 'Aadhaar Card (Back)', key: 'aadhaarBack', icon: '📄' },
+        { label: 'PAN Card', key: 'panCard', icon: '💳' }
+      ];
+
+      DOCS.forEach(doc => {
+        const file = kycDraft[doc.key];
+
+        // Null guard — skip if document missing
+        if (!file) {
+          gridHTML += `
+            <div class="doc-card flex-col">
+              <div class="doc-card-header">${doc.icon} ${doc.label}</div>
+              <div class="doc-card-preview" style="height:150px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); border-radius:var(--radius-md); color:var(--text-muted);">
+                📂 Not Uploaded
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        const isPDF = file.type === 'application/pdf';
+        
+        let mediaHTML = '';
+        if (isPDF) {
+          mediaHTML = `
+            <div class="pdf-preview-icon" style="height:150px; justify-content:center; background:var(--surface-2); border-radius:var(--radius-md);">
+              📕<span>PDF File</span>
+            </div>
+          `;
+        } else {
+          mediaHTML = `
+            <img src="${file.data}" alt="${doc.label} Preview" style="height:150px; width:100%; object-fit:cover; border-radius:var(--radius-md); cursor:pointer;" onclick="openZoom('${file.data}', '${sanitizeHTML(file.name)}')">
+          `;
+        }
+
+        gridHTML += `
+          <div class="doc-card flex-col">
+            <div class="doc-card-header">${doc.icon} ${doc.label}</div>
+            <div class="doc-card-preview">
+              ${mediaHTML}
+              <div class="doc-card-overlay">
+                <button class="btn btn-sm btn-primary" onclick="openZoom('${file.data}', '${sanitizeHTML(file.name)}')">🔍 View Fullsize</button>
+              </div>
+            </div>
+            <div class="doc-card-info">
+              <div class="doc-info-row">
+                <span class="doc-info-label">File Name</span>
+                <span class="doc-info-value truncate" style="max-width: 60%;">${sanitizeHTML(file.name)}</span>
+              </div>
+              <div class="doc-info-row">
+                <span class="doc-info-label">File Size</span>
+                <span class="doc-info-value">${formatFileSize(file.size)}</span>
+              </div>
+              <div class="doc-info-row">
+                <span class="doc-info-label">Uploaded</span>
+                <span class="doc-info-value">${timeAgo(file.uploadedAt)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      grid.innerHTML = gridHTML;
+    }
+
+    function triggerSubmitConfirmation() {
+      const consentChecked = document.getElementById('consent-check').checked;
+      const consentError = document.getElementById('err-consent');
+
+      if (!consentChecked) {
+        consentError.classList.add('show');
+        showToast('⚠️ You must agree to the declaration statement to proceed.', 'warning');
+        return;
+      } else {
+        consentError.classList.remove('show');
+      }
+
+      document.getElementById('confirm-modal').classList.add('open');
+    }
+
+    function closeConfirmationModal() {
+      document.getElementById('confirm-modal').classList.remove('open');
+    }
+
+    function processKYCSubmission() {
+      const submitBtn = document.getElementById('btn-submit-kyc');
+      const modalBtn = document.getElementById('btn-modal-confirm');
+
+      // Loading state on buttons
+      submitBtn.classList.add('btn-loading');
+      modalBtn.classList.add('btn-loading');
+      modalBtn.disabled = true;
+
+      // Create new KYC submission
+      setTimeout(() => {
+        const kycRecord = createKYC({
+          userId: currentUser.id,
+          aadhaarFront: kycDraft.aadhaarFront,
+          aadhaarBack: kycDraft.aadhaarBack,
+          panCard: kycDraft.panCard,
+          timeline: [
+            { step: 'Profile Completed', completedAt: currentUser.createdAt, status: 'completed' },
+            { step: 'Documents Uploaded', completedAt: Date.now() - 30000, status: 'completed' },
+            { step: 'Review Completed', completedAt: Date.now() - 10000, status: 'completed' },
+            { step: 'KYC Submitted', completedAt: Date.now(), status: 'completed' },
+            { step: 'Under Verification', completedAt: null, status: 'active' },
+            { step: 'Verification Decision', completedAt: null, status: 'pending' }
+          ]
+        });
+
+        // Update User KYC profile links
+        updateUser(currentUser.id, {
+          kycStatus: 'pending',
+          kycId: kycRecord.id
+        });
+
+        // Log Activity log
+        logActivity(currentUser.id, currentUser.name, 'Submitted KYC files for validation', { kycId: kycRecord.id }, '📤');
+        
+        // Remove draft uploads from cache
+        localStorage.removeItem(draftKey);
+
+        showToast('✅ KYC Submitted Successfully! Verification pending.', 'success');
+        
+        // Close modal and redirect
+        closeConfirmationModal();
+        setTimeout(() => {
+          window.location.href = 'user-profile.html';
+        }, 1500);
+
+      }, 1500); // 1.5s simulated processing time
+    }
+
+    } // end else (authenticated user)
+  </script>
+</body>
+</html>
