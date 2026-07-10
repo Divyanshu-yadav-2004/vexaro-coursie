@@ -1,12 +1,38 @@
-import React from 'react';
-import { ShieldCheck, FileCheck, ArrowLeft, Send, CheckCircle2, User, Building, MapPin } from 'lucide-react';
-import { redactEmail, redactMobile, redactPincode } from '../utils/storage';
+import React, { useState } from 'react';
+import { ShieldCheck, FileCheck, ArrowLeft, Send, User, Building, MapPin, Loader2 } from 'lucide-react';
+import { redactEmail, redactMobile, redactPincode } from '../utils/api';
 
-export default function Step3ReviewSubmit({ profileData, documentData, onBack, onSubmit }) {
+export default function Step3ReviewSubmit({ profileData, documentData, onBack, onSubmit, readOnly = false }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
   // Mask sensitive information for secure review display
   const maskedEmail = redactEmail(profileData.email);
   const maskedMobile = redactMobile(profileData.mobile);
   const maskedPincode = redactPincode(profileData.pincode);
+
+  const handleSubmit = async () => {
+    setSubmitError('');
+    if (!documentData.aadhaarFront?.file || !documentData.aadhaarBack?.file || !documentData.panCard?.file) {
+      setSubmitError('Please go back and attach all three KYC documents before submitting.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { submitKYC } = await import('../utils/api');
+      const kyc = await submitKYC(
+        documentData.aadhaarFront?.file,
+        documentData.aadhaarBack?.file,
+        documentData.panCard?.file
+      );
+      onSubmit(kyc);
+    } catch (err) {
+      setSubmitError(err.message || 'Failed to submit KYC. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-brand-navy rounded-2xl overflow-hidden shadow-2xl border border-slate-800 animate-fadeIn m-4">
@@ -14,9 +40,13 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
       <div className="bg-brand-grayLight px-5 sm:px-8 py-4 sm:py-5 border-b border-slate-700 flex justify-between items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <span>Review & Submit Application</span>
+            <span>{readOnly ? 'Review Submitted Application' : 'Review & Submit Application'}</span>
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Review your redacted details and confirm document attachments before final dispatch.</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {readOnly
+              ? 'Your submitted profile and document details are shown below for reference.'
+              : 'Review your redacted details and confirm document attachments before final dispatch.'}
+          </p>
         </div>
         <div className="bg-green-950/20 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full border border-green-800/20 flex items-center gap-1 shrink-0">
           <ShieldCheck className="w-3.5 h-3.5 text-green-600" />
@@ -189,7 +219,9 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
               className="w-4 h-4 rounded text-brand-orange bg-slate-900 border-slate-700 focus:ring-brand-orange mt-0.5"
             />
             <label htmlFor="consent" className="text-[10px] text-slate-400 leading-relaxed cursor-pointer select-none">
-              I hereby declare that all the government credentials provided belong to me and are authentic. I consent to the auto-redaction processing for security compliance.
+              {readOnly
+                ? 'This application has already been submitted and is locked while the verification desk reviews it.'
+                : 'I hereby declare that all the government credentials provided belong to me and are authentic. I consent to the auto-redaction processing for security compliance.'}
             </label>
           </div>
 
@@ -197,20 +229,32 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-sm px-6 py-2.5 rounded-xl transition-all"
+              disabled={submitting}
+              className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-slate-300 hover:text-white font-bold text-sm px-6 py-2.5 rounded-xl transition-all"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to Edit
+              {readOnly ? 'Back to Status' : 'Back to Edit'}
             </button>
             
-            <button
-              type="button"
-              onClick={onSubmit}
-              className="flex items-center gap-2 bg-brand-orange hover:bg-brand-orangeHover text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-lg shadow-brand-orange/20 hover:shadow-brand-orange/35 transition-all"
-            >
-              Submit Application
-              <Send className="w-4 h-4" />
-            </button>
+            {!readOnly && (
+              <div className="flex flex-col items-end gap-1">
+                {submitError && (
+                  <p className="text-red-400 text-[10px] max-w-xs text-right">{submitError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="flex items-center gap-2 bg-brand-orange hover:bg-brand-orangeHover disabled:opacity-60 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-lg shadow-brand-orange/20 hover:shadow-brand-orange/35 transition-all"
+                >
+                  {submitting ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</>
+                  ) : (
+                    <>Submit Application <Send className="w-4 h-4" /></>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

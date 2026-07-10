@@ -108,12 +108,35 @@
     const draftKey = 'kyc_draft_' + session.userId;
     let isProcessingFile = false;
     
-    // Draft schema: { aadhaarFront: { data, name, size, type, uploadedAt }, aadhaarBack: {...}, panCard: {...} }
-    let kycDraft = JSON.parse(localStorage.getItem(draftKey)) || {
-      aadhaarFront: null,
-      aadhaarBack: null,
-      panCard: null
-    };
+    let kycDraft = loadKycDraft(draftKey);
+    
+    if (!kycDraft) {
+      // Adopt any existing draft in localStorage or sessionStorage to prevent loss of uploads on ID change
+      const allKeys = new Set([
+        ...Object.keys(localStorage),
+        ...Object.keys(sessionStorage)
+      ]);
+      for (const key of allKeys) {
+        if (key && key.startsWith('kyc_draft_')) {
+          try {
+            const draft = JSON.parse(sessionStorage.getItem(key)) || JSON.parse(localStorage.getItem(key));
+            if (draft && (draft.aadhaarFront || draft.aadhaarBack || draft.panCard)) {
+              kycDraft = draft;
+              saveKycDraft(draftKey, kycDraft);
+              break;
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
+    if (!kycDraft) {
+      kycDraft = {
+        aadhaarFront: null,
+        aadhaarBack: null,
+        panCard: null
+      };
+    }
 
     const STEP_CONFIG = {
       1: {
@@ -260,12 +283,7 @@
               // Persist full base64 for review/submission page
               kycDraft[config.key].data   = base64;
               kycDraft[config.key].base64 = base64;
-              try {
-                localStorage.setItem(draftKey, JSON.stringify(kycDraft));
-              } catch (e) {
-                // localStorage quota exceeded (very large file)
-                showToast('⚠️ File saved in memory only. Do not refresh before submitting.', 'warning');
-              }
+              saveKycDraft(draftKey, kycDraft);
               isProcessingFile = false;
             }).catch(() => {
               showToast('⚠️ Could not save draft to disk. Please re-upload if you refresh.', 'warning');
@@ -293,7 +311,7 @@
       if (confirm(`Remove your uploaded ${config.label}?`)) {
         logActivity(session.userId, session.name, `Removed ${config.label} draft`, {}, '🗑️');
         kycDraft[config.key] = null;
-        localStorage.setItem(draftKey, JSON.stringify(kycDraft));
+        saveKycDraft(draftKey, kycDraft);
         showToast('🗑️ Document removed.', 'info');
         initStep();
       }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ShieldCheck, UserCheck, AlertTriangle, FileText, CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ShieldAlert, Check, X, Shield } from 'lucide-react';
-import { getUsers, getKYCRecords, updateKYCRecord, updateUserProfile, redactEmail, redactMobile, redactPincode } from '../utils/storage';
+import { Search, Filter, ShieldCheck, UserCheck, AlertTriangle, FileText, CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ShieldAlert, Check, X, Shield, RefreshCw } from 'lucide-react';
+import { getAllUsers, getAllKYC, updateKYCStatus, redactEmail, redactMobile, redactPincode } from '../utils/api';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
   const [users, setUsers] = useState([]);
@@ -19,9 +19,21 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setUsers(getUsers().filter(u => u.role === 'user'));
-    setRecords(getKYCRecords());
+  const loadData = async () => {
+    try {
+      // getAllKYC returns records with embedded .user data
+      const kycRecords = await getAllKYC();
+      // Extract unique users from the kyc records
+      const usersFromKyc = kycRecords.map(r => ({
+        ...r.user,
+        kycStatus: r.status,
+        kycId: r.id,
+      }));
+      setUsers(usersFromKyc);
+      setRecords(kycRecords);
+    } catch (err) {
+      console.error('Failed to load admin data:', err);
+    }
   };
 
   // Guard Clause: Only Admins or Owners allowed
@@ -43,25 +55,26 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     );
   }
 
-  // Calculate statistics
-  const totalClients = users.length;
-  const pendingCount = users.filter(u => u.kycStatus === 'pending').length;
-  const approvedCount = users.filter(u => u.kycStatus === 'approved').length;
-  const rejectedCount = users.filter(u => u.kycStatus === 'rejected').length;
+  // Calculate statistics from KYC records
+  const totalClients = records.length;
+  const pendingCount  = records.filter(r => r.status === 'pending').length;
+  const approvedCount = records.filter(r => r.status === 'approved').length;
+  const rejectedCount = records.filter(r => r.status === 'rejected').length;
 
   // Filter clients
   const filteredUsers = users.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          u.email.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          u.agencyName.toLowerCase().includes(searchQuery.toLowerCase());
-    
+    const name    = (u.name || '').toLowerCase();
+    const email   = (u.email || '').toLowerCase();
+    const agency  = (u.agencyName || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = name.includes(q) || email.includes(q) || agency.includes(q);
     const matchesStatus = statusFilter === 'all' ? true : u.kycStatus === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
 
   const handleOpenDetails = (client) => {
-    const kyc = records.find(r => r.userId === client.id) || null;
+    const kyc = records.find(r => r.userId === client.id || r.user?.id === client.id) || null;
     setSelectedClient(client);
     setSelectedRecord(kyc);
     setIsPIIRevealed(false);
@@ -89,43 +102,49 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     setIsPIIRevealed(!isPIIRevealed);
   };
 
-  const handleApprove = () => {
-    if (!selectedClient) return;
-    
-    // Update record and user profile
-    const updatedRecord = updateKYCRecord(selectedClient.id, {
-      status: 'approved',
-      approvedAt: Date.now(),
-      approvedBy: currentUser.name,
-      rejectionReason: null
-    });
-
-    // Log action
-    const newLog = {
-      timestamp: new Date().toLocaleTimeString(),
-      actor: currentUser.email,
-      action: `KYC APPROVED: Client ${selectedClient.name} verification completed.`,
-      level: 'INFO'
-    };
-    setAuditLogs(prev => [newLog, ...prev]);
-
-    // Refresh state
-    loadData();
-    setSelectedClient(prev => ({ ...prev, kycStatus: 'approved' }));
-    setSelectedRecord(updatedRecord);
+  const normalizeWhatsAppNumber = (mobile) => {
+    const digits = String(mobile || '').replace(/\D/g, '');
+    if (!digits) return '';
+    return digits.length === 10 ? `91${digits}` : digits;
   };
 
-  const handleReject = (e) => {
+  const openKycApprovedWhatsApp = (client) => {
+    const whatsappNumber = normalizeWhatsAppNumber(client?.mobile);
+    if (!whatsappNumber) return;
+
+    const message = encodeURIComponent(
+      `Hello ${client.name || 'Customer'}, your KYC verification has been completed and approved by Vexaro Courier Solution Private Limited. You can now continue using your account.`
+    );
+    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank', 'noopener');
+  };
+
+  const handleApprove = async () => {
+    if (!selectedClient) return;
+    try {
+      const updatedRecord = await updateKYCStatus(selectedRecord.id, 'approved');
+      // Log action
+      const newLog = {
+        timestamp: new Date().toLocaleTimeString(),
+        actor: currentUser.email,
+        action: `KYC APPROVED: Client ${selectedClient.name} verification completed.`,
+        level: 'INFO'
+      };
+      setAuditLogs(prev => [newLog, ...prev]);
+      // Refresh state
+      await loadData();
+      setSelectedClient(prev => ({ ...prev, kycStatus: 'approved' }));
+      setSelectedRecord(updatedRecord);
+      openKycApprovedWhatsApp(selectedClient);
+    } catch (err) {
+      console.error('Approve failed:', err);
+    }
+  };
+
+  const handleReject = async (e) => {
     e.preventDefault();
     if (!selectedClient || !rejectionReason.trim()) return;
-
-    // Update record and user profile
-    const updatedRecord = updateKYCRecord(selectedClient.id, {
-      status: 'rejected',
-      rejectionReason: rejectionReason,
-      reviewedAt: Date.now(),
-      reviewedBy: currentUser.name
-    });
+    try {
+      const updatedRecord = await updateKYCStatus(selectedRecord.id, 'rejected', rejectionReason);
 
     // Log action
     const newLog = {
@@ -137,11 +156,14 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     setAuditLogs(prev => [newLog, ...prev]);
 
     // Refresh state
-    loadData();
+    await loadData();
     setSelectedClient(prev => ({ ...prev, kycStatus: 'rejected' }));
     setSelectedRecord(updatedRecord);
     setShowRejectForm(false);
     setRejectionReason('');
+    } catch (err) {
+      console.error('Reject failed:', err);
+    }
   };
 
   return (
@@ -166,11 +188,18 @@ export default function AdminDashboard({ currentUser, onLogout }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="text-right">
             <span className="text-xs text-slate-300 font-semibold block">{currentUser.name}</span>
             <span className="text-[10px] text-slate-500 block">{currentUser.email}</span>
           </div>
+          <button
+            onClick={loadData}
+            title="Refresh data"
+            className="bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-white text-slate-400 text-xs font-bold p-2 rounded-xl transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
           <button
             onClick={onLogout}
             className="bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-white text-slate-400 text-xs font-bold px-4 py-2 rounded-xl transition-all"

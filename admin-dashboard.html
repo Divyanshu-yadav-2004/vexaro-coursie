@@ -402,7 +402,7 @@
       let records = [];
 
       usersList.forEach(user => {
-        const kyc = kycRecordsList.find(k => k.userId === user.id);
+        const kyc = kycRecordsList.find(k => String(k.userId) === String(user.id));
         records.push({
           user: user,
           kyc: kyc,

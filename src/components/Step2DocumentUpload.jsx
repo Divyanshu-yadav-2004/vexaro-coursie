@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { UploadCloud, CheckCircle2, Trash2, ArrowLeft, ArrowRight, ShieldCheck, RefreshCw } from 'lucide-react';
-import { redactFileName } from '../utils/storage';
 
 export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
   const [docs, setDocs] = useState({
@@ -24,11 +23,24 @@ export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
   const handleFileChange = (key, file) => {
     if (!file) return;
 
+    // Validate file type
+    const allowed = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!allowed.includes(file.type)) {
+      alert('Only JPG, PNG, and PDF files are allowed.');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB.');
+      return;
+    }
+
     // Transition to uploading state
     setUploadStatus(prev => ({ ...prev, [key]: 'uploading' }));
     setProgress(prev => ({ ...prev, [key]: 0 }));
 
-    // Simulate progress animation
+    // Simulate progress animation (real upload happens on Step3 submit)
     let currentProgress = 0;
     const interval = setInterval(() => {
       currentProgress += 20;
@@ -36,18 +48,14 @@ export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
 
       if (currentProgress >= 100) {
         clearInterval(interval);
-        
-        // Mock file loading (using mock info + name redaction)
-        const redactedName = redactFileName(file.name, key);
-        
+        // Store the actual File object — will be sent via FormData to the backend
         setDocs(prev => ({
           ...prev,
           [key]: {
-            originalName: file.name,
-            name: redactedName,
+            file,                                        // real File object for upload
+            name: file.name,
             size: `${(file.size / 1024).toFixed(1)} KB`,
             type: file.type,
-            uploadedAt: Date.now()
           }
         }));
         setUploadStatus(prev => ({ ...prev, [key]: 'attached' }));

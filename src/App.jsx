@@ -1,32 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Clock, UserCheck, AlertTriangle, FileText, CheckCircle2, ChevronRight, LogOut, Shield, Info } from 'lucide-react';
+import { ShieldCheck, Clock, UserCheck, AlertTriangle, LogOut } from 'lucide-react';
 import StepTracker from './components/StepTracker';
 import Step1PersonalInfo from './components/Step1PersonalInfo';
 import Step2DocumentUpload from './components/Step2DocumentUpload';
 import Step3ReviewSubmit from './components/Step3ReviewSubmit';
 import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
-import { getSession, logout, getKYCByUserId, updateKYCRecord } from './utils/storage';
+import { getMe, logout as apiLogout, getMyKYC, updateProfile } from './utils/api';
+
+const LOGO_URL = '/assets/vexaro-logo.jpeg';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(1);
   const [profileData, setProfileData] = useState({});
   const [documentData, setDocumentData] = useState({});
   const [kycRecord, setKycRecord] = useState(null);
 
-  // Check for existing session on load
+  // ─── Check for existing JWT session on load ───────────────
   useEffect(() => {
-    const session = getSession();
-    if (session) {
-      handleLoginSuccess(session);
+    async function restoreSession() {
+      const user = await getMe();
+      if (user) {
+        await initUserSession(user);
+      }
+      setLoading(false);
     }
+    restoreSession();
   }, []);
 
-  const handleLoginSuccess = (user) => {
+  const initUserSession = async (user) => {
     setCurrentUser(user);
     if (user.role === 'user') {
-      // Load user profile details
+      // Populate profile data from user object
       setProfileData({
         firstName: user.firstName || '',
         lastName: user.lastName || '',
@@ -34,37 +41,42 @@ export default function App() {
         email: user.email || '',
         mobile: user.mobile || '',
         agencyName: user.agencyName || '',
-        city: clientCityStatePin(user, 'city'),
-        state: clientCityStatePin(user, 'state'),
-        pincode: clientCityStatePin(user, 'pincode'),
-        addressLine1: user.addressLine1 || user.address || '',
+        city: user.city || '',
+        state: user.state || '',
+        pincode: user.pincode || '',
+        addressLine1: user.addressLine1 || '',
         addressLine2: user.addressLine2 || '',
-        billingAddressLine1: user.billingAddressLine1 || user.address || '',
+        billingAddressLine1: user.billingAddressLine1 || '',
         billingAddressLine2: user.billingAddressLine2 || '',
         profilePhoto: user.profilePhoto || null,
-        sameAsPermanent: user.sameAsPermanent ?? true
+        sameAsPermanent: user.sameAsPermanent ?? true,
       });
 
-      // Load KYC records if they exist
-      const record = getKYCByUserId(user.id);
-      setKycRecord(record);
-      if (record) {
-        setDocumentData({
-          aadhaarFront: record.aadhaarFront,
-          aadhaarBack: record.aadhaarBack,
-          panCard: record.panCard
-        });
+      // Load KYC record from API
+      try {
+        const record = await getMyKYC();
+        setKycRecord(record);
+        if (record) {
+          setDocumentData({
+            aadhaarFront: record.aadhaarFront,
+            aadhaarBack: record.aadhaarBack,
+            panCard: record.panCard,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch KYC record:', err);
       }
+
       setStep(1);
     }
   };
 
-  const clientCityStatePin = (user, key) => {
-    return user[key] || '';
+  const handleLoginSuccess = async (user) => {
+    await initUserSession(user);
   };
 
   const handleLogout = () => {
-    logout();
+    apiLogout();
     setCurrentUser(null);
     setStep(1);
     setProfileData({});
@@ -72,8 +84,15 @@ export default function App() {
     setKycRecord(null);
   };
 
-  const handleStep1Submit = (data) => {
+  const handleStep1Submit = async (data) => {
     setProfileData(data);
+    // Save profile to backend
+    try {
+      await updateProfile(data);
+    } catch (err) {
+      console.error('Profile update failed:', err);
+      // Continue to next step anyway — data is in state
+    }
     setStep(2);
   };
 
@@ -82,29 +101,20 @@ export default function App() {
     setStep(3);
   };
 
-  const handleStep3Submit = () => {
-    if (!currentUser) return;
-    
-    // Save to storage
-    const newRecord = updateKYCRecord(currentUser.id, {
-      aadhaarFront: documentData.aadhaarFront,
-      aadhaarBack: documentData.aadhaarBack,
-      panCard: documentData.panCard,
-      status: 'pending'
-    });
-    
-    setKycRecord(newRecord);
-    // Update currentUser state kycStatus
+  const handleStep3Submit = (submittedKyc) => {
+    setKycRecord(submittedKyc);
     setCurrentUser(prev => ({ ...prev, kycStatus: 'pending' }));
-  };
-
-  const handleRestartKYC = () => {
-    // Allows user to re-onboard if rejected
-    setCurrentUser(prev => ({ ...prev, kycStatus: 'not_started' }));
     setStep(1);
   };
 
-  // Helper to render user profile flow states (Steppers / Pending / Approved / Rejected)
+  const handleRestartKYC = () => {
+    setCurrentUser(prev => ({ ...prev, kycStatus: 'not_started' }));
+    setDocumentData({});
+    setKycRecord(null);
+    setStep(1);
+  };
+
+  // ─── Render user portal content based on KYC status ───────
   const renderClientContent = () => {
     const kycStatus = currentUser.kycStatus;
 
@@ -120,7 +130,7 @@ export default function App() {
               Congratulations! Your Vexaro Driver Portal KYC is fully validated and active.
             </p>
           </div>
-          
+
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 text-left text-xs space-y-2.5">
             <div className="flex justify-between border-b border-slate-900 pb-2">
               <span className="text-slate-500">Agency Tag</span>
@@ -147,6 +157,20 @@ export default function App() {
     }
 
     if (kycStatus === 'pending') {
+      if (step === 3) {
+        return (
+          <div className="space-y-4">
+            <Step3ReviewSubmit
+              profileData={profileData}
+              documentData={documentData}
+              onBack={() => setStep(1)}
+              onSubmit={handleStep3Submit}
+              readOnly
+            />
+          </div>
+        );
+      }
+
       return (
         <div className="w-full max-w-2xl mx-auto bg-brand-navy rounded-2xl p-8 border border-slate-800 shadow-2xl text-center space-y-6 animate-fadeIn">
           <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto text-amber-500">
@@ -155,11 +179,10 @@ export default function App() {
           <div className="space-y-2">
             <h2 className="text-2xl font-black text-slate-100">KYC Under Verification</h2>
             <p className="text-slate-400 text-xs leading-relaxed">
-              We have received your profile and document credentials. Vexaro verification desk staff are reviewing your submissions. 
+              We have received your profile and document credentials. Vexaro verification desk staff are reviewing your submissions.
             </p>
           </div>
 
-          {/* Verification Progress Timeline indicator */}
           <div className="p-5 bg-slate-950 border border-slate-850 rounded-2xl text-left space-y-4">
             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide">Timeline Status</h4>
             <div className="relative pl-6 space-y-6 border-l border-slate-800">
@@ -180,9 +203,9 @@ export default function App() {
               </div>
             </div>
           </div>
-          
+
           <button
-            onClick={() => setStep(3)} // View Submitted Read Only Details
+            onClick={() => setStep(3)}
             className="text-xs text-brand-orange hover:text-brand-orangeHover font-semibold underline decoration-dashed transition-all cursor-pointer"
           >
             Review Submitted Credentials
@@ -223,61 +246,74 @@ export default function App() {
       );
     }
 
-    // Step wizard rendering
+    // Step wizard
     return (
       <div className="space-y-4">
         {step < 4 && <StepTracker currentStep={step} />}
-        
+
         {step === 1 && (
-          <Step1PersonalInfo 
-            initialData={profileData} 
-            onNext={handleStep1Submit} 
+          <Step1PersonalInfo
+            initialData={profileData}
+            onNext={handleStep1Submit}
           />
         )}
-        
+
         {step === 2 && (
-          <Step2DocumentUpload 
-            initialData={documentData} 
-            onNext={handleStep2Submit} 
-            onBack={() => setStep(1)} 
+          <Step2DocumentUpload
+            initialData={documentData}
+            onNext={handleStep2Submit}
+            onBack={() => setStep(1)}
           />
         )}
-        
+
         {step === 3 && (
-          <Step3ReviewSubmit 
-            profileData={profileData} 
-            documentData={documentData} 
+          <Step3ReviewSubmit
+            profileData={profileData}
+            documentData={documentData}
             onBack={() => {
-              // If pending, allow reviewing step 3, but click back should exit
               if (currentUser.kycStatus === 'pending') {
                 handleLogout();
               } else {
                 setStep(2);
               }
-            }} 
-            onSubmit={handleStep3Submit} 
+            }}
+            onSubmit={handleStep3Submit}
           />
         )}
       </div>
     );
   };
 
+  // ─── Loading State ────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-brand-navyDark flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-brand-orange flex items-center justify-center font-black text-2xl text-white shadow-lg shadow-brand-orange/20 mx-auto animate-pulse">
+            <img src={LOGO_URL} alt="Vexaro" className="w-full h-full object-contain rounded-xl bg-white" />
+          </div>
+          <p className="text-slate-400 text-sm">Loading Vexaro KYC...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-brand-navyDark text-slate-100 flex flex-col justify-between">
-      
-      {/* Top Simulator Status Bar */}
+
+      {/* Top Nav Bar */}
       {currentUser && (
         <div className="bg-brand-navy border-b border-slate-800/80 px-6 py-3 flex justify-between items-center text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-brand-orange/10 flex items-center justify-center font-bold text-brand-orange text-sm border border-brand-orange/30">
-              V
+            <div className="w-16 h-9 rounded-md bg-white border border-slate-700 flex items-center justify-center overflow-hidden">
+              <img src={LOGO_URL} alt="Vexaro Courier Solution Private Limited" className="w-full h-full object-contain" />
             </div>
             <div>
               <span className="font-extrabold tracking-wider text-slate-200">VEXARO</span>
               <span className="text-[9px] text-slate-400 font-medium block leading-none">Courier Solutions Private Limited</span>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <span className="text-slate-400 font-semibold hidden sm:inline">
               Client Portal: <strong className="text-slate-200 font-normal">{currentUser.name}</strong>
@@ -293,7 +329,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Container */}
+      {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4 py-8">
         {!currentUser ? (
           <Login onLoginSuccess={handleLoginSuccess} />
@@ -306,7 +342,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer Branding */}
+      {/* Footer */}
       {!currentUser && (
         <footer className="text-center py-4 text-[10px] text-slate-650 tracking-wider">
           SECURED BY VEXARO CRYPTOGRAPHIC ID DESK. DESIGNED FOR HIGH-FIDELITY COMPLIANCE.

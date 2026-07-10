@@ -171,9 +171,30 @@
     });
     document.documentElement.setAttribute('data-theme', localStorage.getItem('kyc_theme') || 'light');
 
+    // Try to get current user by ID; fall back to email if ID is missing/stale
     let currentUser = getUserById(session.userId);
+    if (!currentUser && session.email) {
+      currentUser = getUserByEmail(session.email);
+    }
     const draftKey = 'kyc_draft_' + session.userId;
-    let kycDraft = JSON.parse(localStorage.getItem(draftKey));
+    let kycDraft = loadKycDraft(draftKey);
+
+    if (!kycDraft) {
+      // Adopt any existing draft in localStorage to prevent loss of uploads on ID change
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('kyc_draft_')) {
+          try {
+            const draft = JSON.parse(localStorage.getItem(key)) || JSON.parse(sessionStorage.getItem(key));
+            if (draft && (draft.aadhaarFront || draft.aadhaarBack || draft.panCard)) {
+              kycDraft = draft;
+              saveKycDraft(draftKey, kycDraft);
+              break;
+            }
+          } catch(e) {}
+        }
+      }
+    }
 
     window.addEventListener('DOMContentLoaded', () => {
       // Guard: If draft is missing or documents are not uploaded, redirect to upload page
@@ -186,16 +207,25 @@
     });
 
     function renderReviewDetails() {
-      if (!currentUser) return;
+      if (!currentUser) {
+        showToast('⚠️ Could not load user details. Please login again.', 'warning');
+        return;
+      }
 
-      // Render Personal Info Summary
-      document.getElementById('disp-name').textContent = currentUser.name;
-      document.getElementById('disp-email').textContent = currentUser.email;
-      document.getElementById('disp-mobile').textContent = currentUser.mobile;
-      document.getElementById('disp-address').textContent = currentUser.address;
-      document.getElementById('disp-city').textContent = currentUser.city;
-      document.getElementById('disp-state').textContent = currentUser.state;
-      document.getElementById('disp-pincode').textContent = currentUser.pincode;
+      // Render Personal Info Summary with robust fallbacks
+      document.getElementById('disp-name').textContent = currentUser.name || '—';
+      document.getElementById('disp-email').textContent = currentUser.email || '—';
+      document.getElementById('disp-mobile').textContent = currentUser.mobile || '—';
+
+      // Address: combine line1 + line2
+      const addr1 = currentUser.address || currentUser.addressLine1 || '';
+      const addr2 = currentUser.addressLine2 || '';
+      document.getElementById('disp-address').textContent = [addr1, addr2].filter(Boolean).join(', ') || '—';
+
+      // City: try city then billing city
+      document.getElementById('disp-city').textContent    = currentUser.city    || currentUser.billCity  || '—';
+      document.getElementById('disp-state').textContent   = currentUser.state   || currentUser.billState || '—';
+      document.getElementById('disp-pincode').textContent = currentUser.pincode || currentUser.billPinCode || '—';
 
       // Render Uploaded Documents Grid
       const grid = document.getElementById('documents-preview-grid');
@@ -323,7 +353,7 @@
         logActivity(currentUser.id, currentUser.name, 'Submitted KYC files for validation', { kycId: kycRecord.id }, '📤');
         
         // Remove draft uploads from cache
-        localStorage.removeItem(draftKey);
+        removeKycDraft(draftKey);
 
         showToast('✅ KYC Submitted Successfully! Verification pending.', 'success');
         
