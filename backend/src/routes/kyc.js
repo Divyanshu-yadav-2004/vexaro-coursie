@@ -220,9 +220,24 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
     return res.status(400).json({ error: 'rejectionReason is required when rejecting' });
   }
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      'SELECT id, user_id, status FROM kyc_records WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'KYC record not found' });
+    }
+
+    const previousStatus = existing.rows[0].status;
+
     // Update KYC record
-    const result = await pool.query(
+    const result = await client.query(
       `UPDATE kyc_records
        SET status = $1, rejection_reason = $2, reviewed_at = NOW(), reviewed_by = $3
        WHERE id = $4
@@ -230,30 +245,52 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
       [status, status === 'rejected' ? rejectionReason : null, req.user.id, id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'KYC record not found' });
-    }
-
     // Update user's kyc_status to match
-    const userResult = await pool.query(
-      `UPDATE users SET kyc_status = $1 WHERE id = $2 RETURNING id, name, mobile`,
+    const userResult = await client.query(
+      `UPDATE users SET kyc_status = $1 WHERE id = $2 RETURNING id, name, first_name, last_name, mobile`,
       [status, result.rows[0].user_id]
     );
 
+    await client.query('COMMIT');
+
     let whatsapp = { sent: false, skipped: true, reason: 'not_applicable' };
-    if (status === 'approved' && userResult.rows[0]) {
+    const shouldNotify = status === 'approved' && previousStatus !== 'approved' && userResult.rows[0];
+    if (shouldNotify) {
       try {
         whatsapp = await sendKycApprovedWhatsApp(userResult.rows[0]);
       } catch (notifyErr) {
-        console.error('WhatsApp KYC approval notification failed:', notifyErr.message);
-        whatsapp = { sent: false, skipped: false, reason: notifyErr.message };
+        whatsapp = {
+          sent: false,
+          skipped: false,
+          reason: notifyErr.message,
+          status: notifyErr.status || null,
+          to: notifyErr.to || null,
+          mode: notifyErr.mode || null,
+          response: notifyErr.response || null,
+        };
       }
     }
 
+    console.info('[kyc] status updated', {
+      kycId: result.rows[0].id,
+      userId: result.rows[0].user_id,
+      previousStatus,
+      status,
+      whatsapp: {
+        sent: whatsapp.sent,
+        skipped: whatsapp.skipped,
+        reason: whatsapp.reason || null,
+        messageId: whatsapp.messageId || null,
+      },
+    });
+
     res.json({ message: `KYC ${status} successfully`, kyc: formatKYC(result.rows[0]), whatsapp });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Update KYC status error:', err);
     res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 

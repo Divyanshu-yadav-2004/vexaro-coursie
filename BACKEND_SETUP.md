@@ -145,3 +145,68 @@ For the frontend, set:
 ```
 VITE_API_URL=https://your-backend-domain.com/api
 ```
+
+---
+
+## WhatsApp KYC Approval Notifications
+
+The backend sends a WhatsApp Business Cloud API message automatically when a KYC record changes from any non-approved status to `approved`.
+
+Set these variables in `backend/.env`:
+
+```env
+WHATSAPP_PHONE_NUMBER_ID=your_meta_phone_number_id
+WHATSAPP_ACCESS_TOKEN=your_meta_permanent_or_system_user_token
+WHATSAPP_API_VERSION=v20.0
+WHATSAPP_DEFAULT_COUNTRY_CODE=91
+```
+
+Recommended production template setup:
+
+```env
+WHATSAPP_KYC_APPROVED_TEMPLATE_NAME=kyc_approved
+WHATSAPP_KYC_APPROVED_TEMPLATE_LANGUAGE=en_US
+WHATSAPP_KYC_APPROVED_TEMPLATE_INCLUDE_NAME=true
+```
+
+Create and approve the template in Meta WhatsApp Manager. If `WHATSAPP_KYC_APPROVED_TEMPLATE_NAME` is set, the backend sends a template message and passes the customer name as body parameter `{{1}}`. If your template has no body parameters, set `WHATSAPP_KYC_APPROVED_TEMPLATE_INCLUDE_NAME=false`.
+
+If no template name is configured, the backend falls back to a plain text message. That is useful for local/sandbox testing, but production business-initiated notifications normally need an approved WhatsApp template.
+
+Approval response example:
+
+```json
+{
+  "message": "KYC approved successfully",
+  "kyc": {
+    "id": 1,
+    "userId": 3,
+    "status": "approved"
+  },
+  "whatsapp": {
+    "sent": true,
+    "skipped": false,
+    "to": "*******3210",
+    "mode": "template",
+    "status": 200,
+    "messageId": "wamid..."
+  }
+}
+```
+
+End-to-end test:
+
+1. Add the WhatsApp environment variables and restart the backend.
+2. Ensure the test user has a registered mobile number in international format, or a 10-digit Indian number when `WHATSAPP_DEFAULT_COUNTRY_CODE=91`.
+3. Log in as admin or owner and approve a pending KYC request.
+4. Confirm the approval API response includes `whatsapp.sent: true`.
+5. Check backend logs for `[whatsapp] notification sent` and the masked recipient number.
+6. Confirm the message arrives on the user's WhatsApp number.
+
+Failure checks:
+
+- `whatsapp_not_configured`: missing `WHATSAPP_PHONE_NUMBER_ID` or `WHATSAPP_ACCESS_TOKEN`.
+- `missing_mobile`: the user does not have a registered mobile number.
+- `sent: false` with `status`/`response`: Meta returned an API error; verify token permissions, phone number ID, recipient opt-in/test-number setup, and template approval.
+
+Meta reference: [WhatsApp Cloud API send messages](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages).

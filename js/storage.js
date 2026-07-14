@@ -6,7 +6,77 @@ const USERS_KEY = 'kyc_users';
 const KYC_KEY = 'kyc_records';
 const ACTIVITY_KEY = 'kyc_activity';
 
-const BACKEND_URL = 'http://localhost:5000/api/sync';
+function getBackendApiBase() {
+  const configured = window.VEXARO_API_BASE || localStorage.getItem('vexaro_api_base');
+  if (configured) return configured.replace(/\/$/, '');
+
+  const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  // Always use localhost:5000/api for local development regardless of frontend port
+  if (isLocalHost) return 'http://localhost:5000/api';
+
+  return `${window.location.origin}/api`;
+}
+
+const BACKEND_URL = `${getBackendApiBase()}/sync`;
+
+// Debug: Log the API base URL
+console.log('Vexaro API Base:', getBackendApiBase());
+console.log('Backend URL:', BACKEND_URL);
+
+function summarizeSyncPayload(endpoint, payload = {}) {
+  if (!payload || typeof payload !== 'object') return payload;
+  if (endpoint === '/kyc') {
+    return {
+      id: payload.id,
+      userId: payload.userId,
+      email: payload.email,
+      status: payload.status,
+      updatedAt: payload.updatedAt,
+      documents: {
+        aadhaarFront: Boolean(payload.aadhaarFront),
+        aadhaarBack: Boolean(payload.aadhaarBack),
+        panCard: Boolean(payload.panCard)
+      }
+    };
+  }
+  if (endpoint === '/user') {
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+      kycStatus: payload.kycStatus,
+      updatedAt: payload.updatedAt
+    };
+  }
+  if (endpoint === '/activity') {
+    return {
+      userId: payload.userId,
+      userName: payload.userName,
+      action: payload.action,
+      timestamp: payload.timestamp
+    };
+  }
+  return payload;
+}
+
+function normalizePanValue(value) {
+  const cleaned = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(cleaned) ? cleaned : null;
+}
+
+function normalizeDigitsValue(value, length) {
+  const cleaned = String(value || '').replace(/\D/g, '');
+  return cleaned.length === length ? cleaned : null;
+}
+
+function normalizeUserForSync(user = {}) {
+  const normalized = { ...user };
+  if (normalized.email) normalized.email = String(normalized.email).trim().toLowerCase();
+  if (normalized.mobile) normalized.mobile = normalizeDigitsValue(normalized.mobile, 10) || '';
+  if (normalized.aadharNum) normalized.aadharNum = normalizeDigitsValue(normalized.aadharNum, 12);
+  if (normalized.panNum) normalized.panNum = normalizePanValue(normalized.panNum);
+  return normalized;
+}
 
 // ─── SYNC STATUS OVERLAYS & NOTIFICATIONS ─────────────────────
 
@@ -93,41 +163,303 @@ async function processOfflineQueue() {
   }
 }
 
-async function syncPost(endpoint, payload) {
+async function syncPost(endpoint, payload, options = {}) {
+  const { critical = false } = options;
+  if (endpoint === '/user') payload = normalizeUserForSync(payload);
   if (!payload.updatedAt) payload.updatedAt = Date.now();
 
   try {
+    console.log('[syncPost] outgoing request', {
+      endpoint,
+      critical,
+      payload: summarizeSyncPayload(endpoint, payload)
+    });
     const res = await fetch(`${BACKEND_URL}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const data = await res.json();
+    console.log('[syncPost] response received', {
+      endpoint,
+      status: res.status,
+      ok: res.ok,
+      success: data && data.success,
+      message: data && data.message,
+      id: data && data.data && data.data.id,
+      userId: data && data.data && data.data.user_id
+    });
     if (!res.ok || data.success === false) {
       throw new Error(data.message || 'Sync failed');
     }
-    processOfflineQueue();
+    if (!isAdminPage()) processOfflineQueue();
+    return data;
   } catch (err) {
-    // Queue offline operations
+    if (critical || isAdminPage()) throw err;
     let queue = [];
     try { queue = JSON.parse(localStorage.getItem('kyc_offline_queue')) || []; } catch {}
+    
+    // Deduplicate: Keep only the latest update for user/kyc endpoints
+    if (endpoint === '/user') {
+      const payloadId = payload.id;
+      const payloadEmail = payload.email;
+      queue = queue.filter(item => {
+        if (item.endpoint !== '/user') return true;
+        const itemId = item.payload ? item.payload.id : null;
+        const itemEmail = item.payload ? item.payload.email : null;
+        if (payloadId && itemId && payloadId === itemId) return false;
+        if (payloadEmail && itemEmail && payloadEmail.toLowerCase() === itemEmail.toLowerCase()) return false;
+        return true;
+      });
+    } else if (endpoint === '/kyc') {
+      const payloadUserId = payload.userId;
+      queue = queue.filter(item => {
+        if (item.endpoint !== '/kyc') return true;
+        const itemUserId = item.payload ? item.payload.userId : null;
+        return !(payloadUserId && itemUserId && payloadUserId === itemUserId);
+      });
+    } else if (endpoint === '/activity') {
+      // Prune old activities so they don't bloat the queue
+      const activityCount = queue.filter(item => item.endpoint === '/activity').length;
+      if (activityCount >= 5) {
+        const firstActivityIdx = queue.findIndex(item => item.endpoint === '/activity');
+        if (firstActivityIdx !== -1) {
+          queue.splice(firstActivityIdx, 1);
+        }
+      }
+    }
+
     queue.push({ endpoint, payload, timestamp: Date.now() });
-    localStorage.setItem('kyc_offline_queue', JSON.stringify(queue));
+    
+    try {
+      localStorage.setItem('kyc_offline_queue', JSON.stringify(queue));
+    } catch (writeErr) {
+      console.warn('LocalStorage quota exceeded for offline queue:', writeErr.message);
+      // Fallback: prune activity items from the queue
+      queue = queue.filter(item => item.endpoint !== '/activity');
+      try {
+        localStorage.setItem('kyc_offline_queue', JSON.stringify(queue));
+      } catch (finalErr) {
+        console.error('Critical: LocalStorage full. Dropping older queue items to free up space.');
+        if (queue.length > 1) {
+          queue = queue.slice(Math.floor(queue.length / 2));
+          try {
+            localStorage.setItem('kyc_offline_queue', JSON.stringify(queue));
+          } catch (e) {
+            localStorage.removeItem('kyc_offline_queue');
+          }
+        } else {
+          localStorage.removeItem('kyc_offline_queue');
+        }
+      }
+    }
     showOfflineBanner(true);
+    return null;
   }
 }
 
 // ─── INCREMENTAL SYNC & CONFLICT RESOLUTION ───────────────────
 
-async function initStorageFromBackend() {
-  const lastSync = Number(localStorage.getItem('kyc_last_sync')) || 0;
+function isAdminPage() {
+  return /(^|\/)admin-(dashboard|detail)\.html$/i.test(window.location.pathname);
+}
+
+// Admin pages use PostgreSQL as the sole source of truth (in-memory cache only).
+// Never persist admin datasets to localStorage — large KYC payloads can exceed quota
+// and shared localStorage is vulnerable to cross-tab overwrites from the user portal.
+const ADMIN_SESSION_CACHE_KEY = 'vexaro_admin_cache';
+const ADMIN_SESSION_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const adminDataCache = {
+  users: null,
+  records: null,
+  activities: null,
+  loadedAt: 0
+};
+
+let adminDataLoadPromise = null;
+
+function readLocalArray(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildAdminLocalFallbackData() {
+  const users = readLocalArray(USERS_KEY);
+  const records = readLocalArray(KYC_KEY);
+  const activities = normalizeActivityLogs(readLocalArray(ACTIVITY_KEY));
+
+  if (users.length === 0 && records.length === 0 && activities.length === 0) {
+    return null;
+  }
+
+  return { users, records, activities, source: 'localStorage' };
+}
+
+function hasAdminCache() {
+  return isAdminPage() && Array.isArray(adminDataCache.users);
+}
+
+function persistAdminCacheToSession(users, records, activities) {
+  if (!isAdminPage()) return;
+  try {
+    sessionStorage.setItem(ADMIN_SESSION_CACHE_KEY, JSON.stringify({
+      users,
+      records,
+      activities,
+      cachedAt: Date.now()
+    }));
+  } catch (err) {
+    console.warn('Admin session cache skipped (storage quota):', err.message);
+  }
+}
+
+function hydrateAdminCacheFromSession() {
+  if (!isAdminPage() || hasAdminCache()) return false;
+  try {
+    const raw = sessionStorage.getItem(ADMIN_SESSION_CACHE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!validateSyncPayload(parsed)) return false;
+    if (Date.now() - (parsed.cachedAt || 0) > ADMIN_SESSION_CACHE_TTL_MS) return false;
+    if (parsed.records.length === 0) {
+      const fallback = buildAdminLocalFallbackData();
+      if (fallback && fallback.records.length > 0) {
+        setAdminCache(fallback.users, fallback.records, fallback.activities, {
+          persist: false,
+          source: fallback.source
+        });
+        return true;
+      }
+    }
+    setAdminCache(parsed.users, parsed.records, parsed.activities, { persist: false });
+    return true;
+  } catch (err) {
+    console.warn('Failed to hydrate admin cache from session:', err.message);
+    return false;
+  }
+}
+
+function setAdminCache(users, records, activities, options = {}) {
+  const { persist = true, source = 'database' } = options;
+  adminDataCache.users = users;
+  adminDataCache.records = records;
+  adminDataCache.activities = activities;
+  adminDataCache.loadedAt = Date.now();
+  adminDataCache.source = source;
+  if (persist) persistAdminCacheToSession(users, records, activities);
+}
+
+function ensureAdminDataLoaded(options = {}) {
+  if (hasAdminCache()) return Promise.resolve(adminDataCache);
+  if (adminDataLoadPromise) return adminDataLoadPromise;
+
+  hydrateAdminCacheFromSession();
+  if (hasAdminCache()) return Promise.resolve(adminDataCache);
+
+  adminDataLoadPromise = refreshAdminDataFromDatabase({
+    silent: options.silent !== false
+  }).finally(() => {
+    adminDataLoadPromise = null;
+  });
+  return adminDataLoadPromise;
+}
+
+function validateSyncPayload(data) {
+  return Boolean(
+    data &&
+    data.success !== false &&
+    Array.isArray(data.users) &&
+    Array.isArray(data.records) &&
+    Array.isArray(data.activities)
+  );
+}
+
+async function syncDelete(endpoint, payload) {
+  try {
+    const res = await fetch(`${BACKEND_URL}${endpoint}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.message || 'Delete sync failed');
+    }
+    return data;
+  } catch (err) {
+    console.error('Backend delete failed:', err.message);
+    throw err;
+  }
+}
+
+async function initStorageFromBackend(options = {}) {
+  const { forceFull = false, requireDatabase = false, replaceCache = false } = options;
+  const lastSync = forceFull ? 0 : Number(localStorage.getItem('kyc_last_sync')) || 0;
 
   try {
+    console.log('[initStorageFromBackend] fetching sync data', {
+      since: lastSync,
+      forceFull,
+      requireDatabase,
+      replaceCache,
+      adminPage: isAdminPage()
+    });
     const res = await fetch(`${BACKEND_URL}?since=${lastSync}`);
     const data = await res.json();
+    console.log('[initStorageFromBackend] fetch response', {
+      status: res.status,
+      ok: res.ok,
+      success: data && data.success,
+      users: Array.isArray(data && data.users) ? data.users.length : null,
+      records: Array.isArray(data && data.records) ? data.records.length : null,
+      activities: Array.isArray(data && data.activities) ? data.activities.length : null
+    });
     if (!res.ok || data.success === false) throw new Error(data.message || 'Sync request failed');
 
     showOfflineBanner(false);
+
+    if (replaceCache) {
+      if (!validateSyncPayload(data)) {
+        throw new Error('Invalid database response — existing records were kept');
+      }
+
+      let users = data.users;
+      let records = data.records;
+      let activities = data.activities;
+      let source = 'database';
+
+      if (isAdminPage() && records.length === 0) {
+        const fallback = buildAdminLocalFallbackData();
+        if (fallback && fallback.records.length > 0) {
+          console.warn('[admin-data] database returned no KYC records; showing old browser data instead', {
+            users: fallback.users.length,
+            records: fallback.records.length,
+            activities: fallback.activities.length
+          });
+          users = fallback.users;
+          records = fallback.records;
+          activities = fallback.activities;
+          source = fallback.source;
+        }
+      }
+
+      if (isAdminPage()) {
+        setAdminCache(users, records, activities, { source });
+      } else {
+        saveUsers(users);
+        saveKYCRecords(records);
+        saveActivityLogs(activities);
+        localStorage.setItem('kyc_last_sync', String(Date.now()));
+      }
+      if (!isAdminPage()) processOfflineQueue();
+      window.dispatchEvent(new CustomEvent('vexaro-admin-data-refreshed'));
+      return { users, records, activities };
+    }
 
     // 1. Conflict Resolution for Users
     if (data.users && data.users.length > 0) {
@@ -178,25 +510,81 @@ async function initStorageFromBackend() {
 
     localStorage.setItem('kyc_last_sync', String(Date.now()));
     processOfflineQueue();
+    return true;
   } catch (err) {
     console.warn('Backend sync unavailable, using localStorage cache:', err.message);
+    if (isAdminPage()) {
+      const fallback = buildAdminLocalFallbackData();
+      if (fallback) {
+        setAdminCache(fallback.users, fallback.records, fallback.activities, {
+          source: fallback.source,
+          persist: false
+        });
+        window.dispatchEvent(new CustomEvent('vexaro-admin-data-refreshed'));
+        return fallback;
+      }
+    }
+    if (requireDatabase) {
+      showOfflineBanner(false);
+      throw err;
+    }
     showOfflineBanner(true);
+    return false;
   }
+}
+
+function refreshAdminDataFromDatabase(options = {}) {
+  return initStorageFromBackend({
+    forceFull: true,
+    requireDatabase: !options.silent,
+    replaceCache: true
+  });
 }
 
 // ─── User CRUD ───────────────────────────────────────────────
 
 function getUsers() {
+  if (isAdminPage()) {
+    if (!hasAdminCache()) {
+      // Auto-refresh from database if cache is empty (e.g., after page refresh)
+      refreshAdminDataFromDatabase({ silent: true }).catch(err => {
+        console.warn('Failed to auto-refresh admin data:', err.message);
+      });
+    }
+    return hasAdminCache() ? adminDataCache.users : [];
+  }
   try { return JSON.parse(localStorage.getItem(USERS_KEY)) || []; }
   catch { return []; }
 }
 
 function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  if (isAdminPage()) {
+    adminDataCache.users = users;
+    return;
+  }
+  try {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  } catch (err) {
+    console.error('Failed to save users to localStorage (quota exceeded):', err);
+  }
+}
+
+function normalizeId(value) {
+  if (value === undefined || value === null) return { raw: '', number: null };
+  const raw = String(value).trim().toLowerCase();
+  const match = raw.match(/^(?:user|kyc|u|k)?-?(\d+)$/);
+  return {
+    raw,
+    number: match ? Number(match[1]) : null
+  };
 }
 
 function idsMatch(a, b) {
-  return String(a) === String(b);
+  const left = normalizeId(a);
+  const right = normalizeId(b);
+  if (!left.raw || !right.raw) return false;
+  if (left.raw === right.raw) return true;
+  return left.number !== null && right.number !== null && left.number === right.number;
 }
 
 function getUserById(id) {
@@ -207,7 +595,7 @@ function getUserByEmail(email) {
   return getUsers().find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
 }
 
-function createUser(userData) {
+async function createUser(userData) {
   const users = getUsers();
   const nameParts = (userData.name || '').trim().split(' ');
   const firstName = nameParts[0] || '';
@@ -241,11 +629,11 @@ function createUser(userData) {
   };
   users.push(newUser);
   saveUsers(users);
-  syncPost('/user', newUser);
+  await syncPost('/user', newUser, { critical: false });
   return newUser;
 }
 
-function updateUser(id, data) {
+async function updateUser(id, data) {
   const users = getUsers();
   const idx = users.findIndex(u => idsMatch(u.id, id));
   if (idx === -1) return null;
@@ -258,24 +646,45 @@ function updateUser(id, data) {
 
   users[idx] = { ...users[idx], ...data, updatedAt: Date.now() };
   saveUsers(users);
-  syncPost('/user', users[idx]);
+  await syncPost('/user', users[idx], { critical: isAdminPage() });
   return users[idx];
 }
 
-function deleteUser(id) {
-  const users = getUsers().filter(u => u.id !== id);
+async function deleteUser(id) {
+  const user = getUserById(id);
+  const users = getUsers().filter(u => !idsMatch(u.id, id));
   saveUsers(users);
+  if (user?.email) {
+    await syncDelete('/user', { email: user.email });
+  }
 }
 
 // ─── KYC Records CRUD ────────────────────────────────────────
 
 function getKYCRecords() {
+  if (isAdminPage()) {
+    if (!hasAdminCache()) {
+      // Auto-refresh from database if cache is empty (e.g., after page refresh)
+      refreshAdminDataFromDatabase({ silent: true }).catch(err => {
+        console.warn('Failed to auto-refresh admin data:', err.message);
+      });
+    }
+    return hasAdminCache() ? adminDataCache.records : [];
+  }
   try { return JSON.parse(localStorage.getItem(KYC_KEY)) || []; }
   catch { return []; }
 }
 
 function saveKYCRecords(records) {
-  localStorage.setItem(KYC_KEY, JSON.stringify(records));
+  if (isAdminPage()) {
+    adminDataCache.records = records;
+    return;
+  }
+  try {
+    localStorage.setItem(KYC_KEY, JSON.stringify(records));
+  } catch (err) {
+    console.error('Failed to save KYC records to localStorage (quota exceeded):', err);
+  }
 }
 
 function getKYCByUserId(userId) {
@@ -286,7 +695,8 @@ function getKYCById(id) {
   return getKYCRecords().find(k => idsMatch(k.id, id)) || null;
 }
 
-function createKYC(kycData) {
+async function createKYC(kycData, options = {}) {
+  const { critical = true } = options;
   const records = getKYCRecords();
   const newKYC = {
     id: generateId(),
@@ -303,15 +713,24 @@ function createKYC(kycData) {
     timeline: kycData.timeline || [],
     updatedAt: Date.now()
   };
-  records.push(newKYC);
-  saveKYCRecords(records);
 
   const user = getUserById(kycData.userId);
-  syncPost('/kyc', { ...newKYC, email: user ? user.email : '' });
+  if (!user || !user.email) {
+    throw new Error('KYC submission cannot be saved because the user email is missing.');
+  }
+
+  await syncPost('/user', user, { critical });
+  const syncResult = await syncPost('/kyc', { ...newKYC, email: user.email }, { critical });
+  if (critical && (!syncResult || syncResult.success === false)) {
+    throw new Error('KYC submission was not confirmed by the database.');
+  }
+
+  records.push(newKYC);
+  saveKYCRecords(records);
   return newKYC;
 }
 
-function updateKYC(id, data) {
+async function updateKYC(id, data) {
   const records = getKYCRecords();
   const idx = records.findIndex(k => idsMatch(k.id, id));
   if (idx === -1) return null;
@@ -320,12 +739,21 @@ function updateKYC(id, data) {
   saveKYCRecords(records);
 
   const user = getUserById(records[idx].userId);
-  syncPost('/kyc', { ...records[idx], email: user ? user.email : '' });
+  const syncResult = await syncPost('/kyc', { ...records[idx], email: user ? user.email : '' }, { critical: isAdminPage() });
+  if (syncResult?.data?.whatsapp) {
+    records[idx].whatsapp = syncResult.data.whatsapp;
+    saveKYCRecords(records);
+  }
   return records[idx];
 }
 
-function deleteKYC(id) {
+async function deleteKYC(id) {
+  const record = getKYCById(id);
+  const user = record ? getUserById(record.userId) : null;
   saveKYCRecords(getKYCRecords().filter(k => !idsMatch(k.id, id)));
+  if (user?.email) {
+    await syncDelete('/kyc', { email: user.email });
+  }
 }
 
 function getKYCStats() {
@@ -345,12 +773,68 @@ function getKYCStats() {
 // ─── Activity Log ─────────────────────────────────────────────
 
 function getActivityLogs() {
-  try { return JSON.parse(localStorage.getItem(ACTIVITY_KEY)) || []; }
+  if (isAdminPage()) {
+    if (!hasAdminCache()) {
+      // Auto-refresh from database if cache is empty (e.g., after page refresh)
+      refreshAdminDataFromDatabase({ silent: true }).catch(err => {
+        console.warn('Failed to auto-refresh admin data:', err.message);
+      });
+    }
+    return hasAdminCache() ? (adminDataCache.activities || []) : [];
+  }
+  try { return normalizeActivityLogs(JSON.parse(localStorage.getItem(ACTIVITY_KEY)) || []); }
   catch { return []; }
 }
 
-function saveActivityLogs(logs) {
-  localStorage.setItem(ACTIVITY_KEY, JSON.stringify(logs));
+function saveActivityLogsLegacy(newLog) {
+    try {
+        // 1. Fetch current logs, default to an empty array if empty
+        let logs = [];
+        const existingLogs = localStorage.getItem('kyc_activity');
+        if (existingLogs) {
+            logs = JSON.parse(existingLogs);
+        }
+        
+        // 2. Add the newest log to the very top of the list
+        logs.unshift(newLog); 
+        
+        // 3. 🚨 THE CAP: Slice the array to keep only the 15 most recent logs
+        // This stops the data from bloating and exceeding the 5MB quota
+        if (logs.length > 15) {
+            logs = logs.slice(0, 15);
+        }
+        
+        // 4. Save the safely capped array back to localStorage
+        localStorage.setItem('kyc_activity', JSON.stringify(logs));
+    } catch (err) {
+        // If it still hits an issue, catch it safely without crashing the UI
+        console.warn('LocalStorage quota limit managed. Active stream preferred.', err);
+    }
+}
+
+function normalizeActivityLogs(value) {
+  const list = Array.isArray(value) ? value.flat(Infinity) : [];
+  return list
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0))
+    .slice(0, 50);
+}
+
+function saveActivityLogs(input) {
+  try {
+    const existingLogs = normalizeActivityLogs(JSON.parse(localStorage.getItem(ACTIVITY_KEY)) || []);
+    const logs = Array.isArray(input)
+      ? normalizeActivityLogs(input)
+      : normalizeActivityLogs([input, ...existingLogs]);
+
+    try {
+      localStorage.setItem(ACTIVITY_KEY, JSON.stringify(logs));
+    } catch (quotaErr) {
+      localStorage.setItem(ACTIVITY_KEY, JSON.stringify(logs.slice(0, 15)));
+    }
+  } catch (err) {
+    console.warn('LocalStorage quota limit managed. Active stream preferred.', err);
+  }
 }
 
 function getActivityByUserId(userId) {
@@ -358,10 +842,9 @@ function getActivityByUserId(userId) {
 }
 
 function logActivity(userId, userName, action, details = {}, icon = '📋') {
-  const logs = getActivityLogs();
   const newLog = { id: generateId(), userId, userName, action, timestamp: Date.now(), details, icon };
-  logs.unshift(newLog);
-  saveActivityLogs(logs.slice(0, 500));
+  // saveActivityLogs expects a single log object to prepend (not a full array)
+  saveActivityLogs(newLog);
   syncPost('/activity', newLog);
 }
 
@@ -402,18 +885,26 @@ function seedDemoData() {
 /** Initialize storage — seed fallback data only if localStorage is completely empty */
 function initStorage() {
   // Only seed demo data if there are truly no users at all
-  // Never wipe existing user data regardless of schema version
-  if (getUsers().length === 0) {
+  // Never seed demo data into admin pages; admin data must come from PostgreSQL.
+  if (!isAdminPage() && getUsers().length === 0) {
     seedDemoData();
   }
 }
 
 // ─── INITIALIZATION ON IMPORT ──────────────────────────────────
 initStorage();
-initStorageFromBackend();
-
-// Set retry interval loop for offline queues & incremental fetches
-setInterval(() => {
-  processOfflineQueue();
+if (isAdminPage()) {
+  hydrateAdminCacheFromSession();
+} else {
   initStorageFromBackend();
-}, 30000);
+}
+
+// User portal: retry offline queue and incremental sync only.
+// Admin pages never poll — they load from PostgreSQL on demand to avoid
+// overwriting in-flight admin changes with stale database reads.
+if (!isAdminPage()) {
+  setInterval(() => {
+    processOfflineQueue();
+    initStorageFromBackend();
+  }, 30000);
+}

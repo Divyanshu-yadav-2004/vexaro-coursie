@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db');
+const { sendKycApprovedWhatsApp } = require('../services/whatsapp');
 const router = express.Router();
 
 // Helper for consistent error responses
@@ -17,6 +18,32 @@ function success(res, message, data = {}) {
     message: message,
     data: data
   });
+}
+
+function summarizeKycPayload(k = {}) {
+  return {
+    id: k.id,
+    userId: k.userId,
+    email: k.email,
+    status: k.status,
+    submittedAt: k.submittedAt,
+    updatedAt: k.updatedAt,
+    documents: {
+      aadhaarFront: Boolean(k.aadhaarFront),
+      aadhaarBack: Boolean(k.aadhaarBack),
+      panCard: Boolean(k.panCard)
+    }
+  };
+}
+
+function summarizeUserPayload(u = {}) {
+  return {
+    id: u.id,
+    email: u.email,
+    role: u.role,
+    kycStatus: u.kycStatus,
+    updatedAt: u.updatedAt
+  };
 }
 
 // Helper: Validate email format
@@ -43,12 +70,26 @@ function isValidMobile(mobile) {
   return re.test(String(mobile));
 }
 
+function normalizePan(pan) {
+  if (!pan) return null;
+  return String(pan).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeDigits(value) {
+  if (!value) return null;
+  return String(value).replace(/\D/g, '');
+}
+
 // ─── GET /api/sync ────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const { since } = req.query;
   const sinceMs = since ? Number(since) : 0;
   
   try {
+    console.log('[sync:get] incoming request', {
+      since: sinceMs,
+      database: process.env.DATABASE_URL ? 'DATABASE_URL' : (process.env.DB_NAME || 'vexaro_kyc')
+    });
     let usersQuery = 'SELECT * FROM users ORDER BY id ASC';
     let kycQuery = 'SELECT * FROM kyc_records ORDER BY id ASC';
     let activityQuery = 'SELECT * FROM activity_logs ORDER BY timestamp DESC';
@@ -62,18 +103,28 @@ router.get('/', async (req, res) => {
       params = [sinceMs];
     }
 
-    const usersRes = await pool.query(usersQuery, params);
-    const kycRes = await pool.query(kycQuery, params);
-    const activityRes = await pool.query(activityQuery, params);
+    // Run all three queries in parallel — much faster and prevents cascading timeouts
+    const [usersRes, kycRes, activityRes] = await Promise.all([
+      pool.query(usersQuery, params),
+      pool.query(kycQuery, params),
+      pool.query(activityQuery, params)
+    ]);
+
+    console.log('[sync:get] database query result', {
+      users: usersRes.rowCount,
+      kycRecords: kycRes.rowCount,
+      activities: activityRes.rowCount,
+      since: sinceMs
+    });
 
     // Map database records back to the static frontend objects format
     const users = usersRes.rows.map(u => ({
       id: u.role === 'admin' ? 'admin1' : u.role === 'owner' ? 'owner1' : 'u' + u.id,
-      name: u.name,
-      firstName: u.first_name,
-      lastName: u.last_name,
+      name: u.name || (u.first_name ? `${u.first_name} ${u.last_name || ''}`.trim() : u.email),
+      firstName: u.first_name || '',
+      lastName: u.last_name || '',
       email: u.email,
-      mobile: u.mobile,
+      mobile: u.mobile || '',
       address: u.address_line1,
       addressLine2: u.address_line2,
       state: u.state,
@@ -150,12 +201,26 @@ router.get('/', async (req, res) => {
       icon: row.icon
     }));
 
-    res.json({
+    const responsePayload = {
       success: true,
       users,
       records,
       activities
+    };
+
+    console.log('[sync:get] admin/frontend response', {
+      users: users.length,
+      records: records.length,
+      activities: activities.length,
+      latestRecord: records[0] ? {
+        id: records[0].id,
+        userId: records[0].userId,
+        status: records[0].status,
+        submittedAt: records[0].submittedAt
+      } : null
     });
+
+    res.json(responsePayload);
 
   } catch (err) {
     console.error('Fetch sync data error:', err);
@@ -166,6 +231,12 @@ router.get('/', async (req, res) => {
 // ─── POST /api/sync/user ──────────────────────────────────────
 router.post('/user', async (req, res) => {
   const u = req.body;
+  console.log('[sync:user] incoming request', summarizeUserPayload(u));
+
+  if (u.email) u.email = String(u.email).trim().toLowerCase();
+  if (u.mobile) u.mobile = normalizeDigits(u.mobile);
+  if (u.aadharNum) u.aadharNum = normalizeDigits(u.aadharNum);
+  if (u.panNum) u.panNum = normalizePan(u.panNum);
 
   // Validation
   if (!u.email) return fail(res, 400, 'Email address is required');
@@ -191,6 +262,11 @@ router.post('/user', async (req, res) => {
       if (clientUpdatedAt > 0 && dbUpdatedAt > clientUpdatedAt) {
         // DB is newer, don't overwrite it
         await client.query('COMMIT');
+        console.log('[sync:user] skipped older client payload', {
+          email: u.email,
+          dbUpdatedAt,
+          clientUpdatedAt
+        });
         return success(res, 'DB has newer version, skip update', { skipped: true });
       }
 
@@ -237,7 +313,18 @@ router.post('/user', async (req, res) => {
       );
     }
 
+    console.log('[sync:user] database write result', {
+      rowCount: userResult.rowCount,
+      id: userResult.rows[0]?.id,
+      email: userResult.rows[0]?.email,
+      kycStatus: userResult.rows[0]?.kyc_status
+    });
+
     await client.query('COMMIT');
+    console.log('[sync:user] transaction committed', {
+      id: userResult.rows[0]?.id,
+      email: userResult.rows[0]?.email
+    });
     return success(res, 'User synced successfully', userResult.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -251,33 +338,52 @@ router.post('/user', async (req, res) => {
 // ─── POST /api/sync/kyc ───────────────────────────────────────
 router.post('/kyc', async (req, res) => {
   const k = req.body;
+  console.log('[sync:kyc] incoming request', summarizeKycPayload(k));
 
   if (!k.email) return fail(res, 400, 'User email is required to associate KYC record');
+  if (!k.aadhaarFront || !k.aadhaarBack || !k.panCard) {
+    return fail(res, 400, 'aadhaarFront, aadhaarBack, and panCard are required');
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     // 1. Find user by email
-    const userRes = await client.query('SELECT id, updated_at FROM users WHERE email = $1', [k.email.toLowerCase()]);
+    const userRes = await client.query(
+      'SELECT id, name, first_name, last_name, mobile, updated_at FROM users WHERE email = $1',
+      [k.email.toLowerCase()]
+    );
     if (userRes.rows.length === 0) {
       await client.query('ROLLBACK');
+      console.warn('[sync:kyc] rollback: user not found', { email: k.email });
       return fail(res, 404, 'User not found in database for KYC association');
     }
     const dbUserId = userRes.rows[0].id;
+    console.log('[sync:kyc] associated user', {
+      email: k.email,
+      userId: dbUserId
+    });
 
     // Check if KYC record already exists for this user
     const kycFindRes = await client.query('SELECT id, status, updated_at FROM kyc_records WHERE user_id = $1', [dbUserId]);
 
     let kycResult;
+    let previousStatus = null;
     if (kycFindRes.rows.length > 0) {
       // Conflict Resolution check
       const dbKyc = kycFindRes.rows[0];
+      previousStatus = dbKyc.status;
       const dbUpdatedAt = new Date(dbKyc.updated_at).getTime();
       const clientUpdatedAt = k.updatedAt ? Number(k.updatedAt) : 0;
 
       if (clientUpdatedAt > 0 && dbUpdatedAt > clientUpdatedAt) {
         await client.query('COMMIT');
+        console.log('[sync:kyc] skipped older client payload', {
+          userId: dbUserId,
+          dbUpdatedAt,
+          clientUpdatedAt
+        });
         return success(res, 'DB has newer version, skip update', { skipped: true });
       }
 
@@ -288,8 +394,9 @@ router.post('/kyc', async (req, res) => {
              aadhaar_back_name = $4, aadhaar_back_size = $5, aadhaar_back_data = $6,
              pan_card_name = $7, pan_card_size = $8, pan_card_data = $9,
              status = $10, rejection_reason = $11, reviewed_by = $12, reviewed_at = $13,
+             submitted_at = COALESCE($14, submitted_at),
              updated_at = NOW()
-         WHERE user_id = $14
+         WHERE user_id = $15
          RETURNING *`,
         [
           k.aadhaarFront?.name || null, k.aadhaarFront?.size || null, k.aadhaarFront?.data || null,
@@ -298,6 +405,7 @@ router.post('/kyc', async (req, res) => {
           k.status || 'pending', k.rejectionReason || null,
           k.reviewedBy ? 1 : null, // admin ID placeholder
           k.reviewedAt ? new Date(k.reviewedAt) : null,
+          k.submittedAt ? new Date(k.submittedAt) : null,
           dbUserId
         ]
       );
@@ -308,27 +416,71 @@ router.post('/kyc', async (req, res) => {
           (user_id, aadhaar_front_name, aadhaar_front_size, aadhaar_front_data,
            aadhaar_back_name, aadhaar_back_size, aadhaar_back_data,
            pan_card_name, pan_card_size, pan_card_data,
-           status, rejection_reason)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           status, rejection_reason, submitted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, NOW()))
          RETURNING *`,
         [
           dbUserId,
           k.aadhaarFront?.name || null, k.aadhaarFront?.size || null, k.aadhaarFront?.data || null,
           k.aadhaarBack?.name || null, k.aadhaarBack?.size || null, k.aadhaarBack?.data || null,
           k.panCard?.name || null, k.panCard?.size || null, k.panCard?.data || null,
-          k.status || 'pending', k.rejectionReason || null
+          k.status || 'pending', k.rejectionReason || null,
+          k.submittedAt ? new Date(k.submittedAt) : null
         ]
       );
     }
 
+    console.log('[sync:kyc] database write result', {
+      rowCount: kycResult.rowCount,
+      id: kycResult.rows[0]?.id,
+      userId: kycResult.rows[0]?.user_id,
+      status: kycResult.rows[0]?.status,
+      submittedAt: kycResult.rows[0]?.submitted_at
+    });
+
     // Update user's kyc_status to match the KYC record status in transaction
-    await client.query(
+    const userStatusResult = await client.query(
       'UPDATE users SET kyc_status = $1, updated_at = NOW() WHERE id = $2',
       [k.status || 'pending', dbUserId]
     );
+    console.log('[sync:kyc] user status update result', {
+      rowCount: userStatusResult.rowCount,
+      userId: dbUserId,
+      kycStatus: k.status || 'pending'
+    });
 
     await client.query('COMMIT');
-    return success(res, 'KYC synced successfully', kycResult.rows[0]);
+
+    let whatsapp = { sent: false, skipped: true, reason: 'not_applicable' };
+    const finalStatus = k.status || 'pending';
+    const shouldNotify = finalStatus === 'approved' && previousStatus !== 'approved';
+    if (shouldNotify) {
+      try {
+        whatsapp = await sendKycApprovedWhatsApp(userRes.rows[0]);
+      } catch (notifyErr) {
+        whatsapp = {
+          sent: false,
+          skipped: false,
+          reason: notifyErr.message,
+          status: notifyErr.status || null,
+          to: notifyErr.to || null,
+          mode: notifyErr.mode || null,
+          response: notifyErr.response || null,
+        };
+      }
+    }
+
+    console.log('[sync:kyc] transaction committed', {
+      kycId: kycResult.rows[0]?.id,
+      userId: dbUserId,
+      whatsapp: {
+        sent: whatsapp.sent,
+        skipped: whatsapp.skipped,
+        reason: whatsapp.reason || null,
+        messageId: whatsapp.messageId || null
+      }
+    });
+    return success(res, 'KYC synced successfully', { ...kycResult.rows[0], whatsapp });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Sync KYC error:', err);

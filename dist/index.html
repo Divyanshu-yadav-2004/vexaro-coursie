@@ -1,19 +1,951 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vexaro Onboarding & Verification Portal</title>
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <meta name="description" content="Secure 3-Step Onboarding and KYC Verification Portal for Vexaro Courier Solutions.">
-    <script type="module" crossorigin src="/assets/index-CkN3V8xU.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BV2k8s_E.css">
-  </head>
-  <body class="bg-brand-navyDark text-slate-100 min-h-screen antialiased">
-    <div id="root"></div>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login & Registration | Vexaro KYC Portal</title>
+  <meta name="description" content="Secure KYC verification portal for Vexaro Courier Solution Private Limited.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: stretch;
+    }
+
+    /* ── Layout ── */
+    .portal-wrap {
+      display: flex;
+      width: 100%;
+      min-height: 100vh;
+    }
+
+    /* ── Left Branding Panel ── */
+    .brand-panel {
+      flex: 1.15;
+      background: linear-gradient(150deg, #1d3557 0%, #0d2240 55%, #1a3a6b 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 52px 56px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Decorative circles */
+    .brand-panel::before {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255,107,0,0.1);
+      top: -160px; right: -160px;
+      pointer-events: none;
+    }
+    .brand-panel::after {
+      content: '';
+      position: absolute;
+      width: 320px; height: 320px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.05);
+      bottom: 40px; left: -100px;
+      pointer-events: none;
+    }
+
+    /* Logo area */
+    .brand-logo-area {
+      position: relative;
+      z-index: 2;
+      background: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 14px 22px;
+      border-radius: 16px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+      max-width: 320px;
+    }
+    .brand-logo-area img {
+      width: 100%;
+      max-width: 280px;
+      height: auto;
+    }
+
+    /* Brand body */
+    .brand-body {
+      position: relative;
+      z-index: 2;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 44px 0 32px;
+    }
+    .brand-headline {
+      font-size: 34px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.25;
+      margin-bottom: 16px;
+    }
+    .brand-headline span {
+      color: #FF6B00;
+    }
+    .brand-desc {
+      font-size: 14.5px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.75;
+      max-width: 380px;
+      margin-bottom: 40px;
+    }
+
+    /* Feature list */
+    .brand-features { display: flex; flex-direction: column; gap: 18px; }
+    .brand-feature-item { display: flex; align-items: flex-start; gap: 14px; }
+    .brand-feature-icon {
+      width: 40px; height: 40px;
+      background: rgba(255,107,0,0.14);
+      border: 1px solid rgba(255,107,0,0.25);
+      border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; flex-shrink: 0;
+    }
+    .brand-feature-text h4 {
+      font-size: 13px; font-weight: 700;
+      color: rgba(255,255,255,0.92); margin-bottom: 2px;
+    }
+    .brand-feature-text p {
+      font-size: 11.5px;
+      color: rgba(255,255,255,0.38);
+      line-height: 1.55;
+    }
+
+    /* Stats footer */
+    .brand-stats {
+      display: flex; gap: 32px;
+      position: relative; z-index: 2;
+      padding-top: 28px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .brand-stat { }
+    .brand-stat-num { font-size: 22px; font-weight: 800; color: #FF6B00; line-height: 1; }
+    .brand-stat-label {
+      font-size: 9.5px; color: rgba(255,255,255,0.3);
+      margin-top: 3px; font-weight: 600;
+      letter-spacing: 0.07em; text-transform: uppercase;
+    }
+
+    /* ── Right Form Panel ── */
+    .form-panel {
+      flex: 0.85;
+      background: #ffffff;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 48px 36px;
+      overflow-y: auto;
+      border-left: 1px solid #e8edf2;
+    }
+    .form-panel-inner { width: 100%; max-width: 420px; }
+
+    /* Form header */
+    .form-header { margin-bottom: 26px; }
+    .form-header h2 {
+      font-size: 22px; font-weight: 800; color: #1e293b;
+    }
+    .form-header p {
+      font-size: 13px; color: #64748b; margin-top: 4px;
+    }
+
+    /* Tab Bar */
+    .tab-bar {
+      display: flex;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 4px;
+      margin-bottom: 26px;
+    }
+    .tab-item {
+      flex: 1; padding: 10px 16px;
+      border: none; background: transparent;
+      color: #64748b;
+      font-size: 13px; font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      border-radius: 11px; cursor: pointer;
+      transition: all 0.22s ease;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .tab-item.active {
+      background: #ffffff;
+      color: #FF6B00;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.09);
+      border: 1px solid #e8edf2;
+    }
+    .tab-item:not(.active):hover { color: #1d3557; background: rgba(255,255,255,0.6); }
+
+    /* Pane */
+    .pane { display: none; animation: fadeUp 0.28s ease; }
+    .pane.active { display: block; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(7px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Photo Upload */
+    .photo-upload-wrap {
+      display: flex; flex-direction: column;
+      align-items: center; margin-bottom: 22px;
+    }
+    .photo-circle {
+      width: 86px; height: 86px; border-radius: 50%;
+      border: 2px dashed #cbd5e1;
+      background: #f8fafc;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.22s ease;
+      overflow: hidden; position: relative;
+    }
+    .photo-circle:hover {
+      border-color: #FF6B00;
+      background: #fff7f0;
+      transform: scale(1.04);
+      box-shadow: 0 4px 16px rgba(255,107,0,0.15);
+    }
+    .photo-circle-icon { font-size: 20px; margin-bottom: 3px; }
+    .photo-circle-label {
+      font-size: 9px; font-weight: 700;
+      color: #94a3b8; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .photo-circle img {
+      width: 100%; height: 100%; -o-object-fit: cover; object-fit: cover;
+      position: absolute; inset: 0;
+    }
+    .photo-hint { font-size: 10.5px; color: #94a3b8; margin-top: 8px; }
+
+    /* Field rows */
+    .field-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .field-row.cols-2 { grid-template-columns: 1fr 1fr; }
+
+    /* Field group */
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block; font-size: 11.5px; font-weight: 700;
+      color: #475569; margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 11px;
+      padding: 10px 13px;
+      font-size: 13.5px;
+      font-family: 'Inter', sans-serif;
+      color: #1e293b;
+      transition: all 0.18s ease;
+      outline: none;
+    }
+    .field input::-moz-placeholder, .field textarea::-moz-placeholder { color: #c0ccd8; }
+    .field input::placeholder,
+    .field textarea::placeholder { color: #c0ccd8; }
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      border-color: #FF6B00;
+      background: #fff9f5;
+      box-shadow: 0 0 0 3px rgba(255,107,0,0.1);
+    }
+    .field input.error,
+    .field textarea.error {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
+    }
+    .field select option { background: #ffffff; color: #1e293b; }
+    .field textarea { resize: vertical; min-height: 76px; }
+
+    /* Error messages */
+    .field-err { font-size: 10.5px; color: #ef4444; margin-top: 4px; display: none; }
+    .field-err.show { display: block; }
+
+    /* Submit button */
+    .btn-submit {
+      width: 100%; padding: 13px;
+      background: linear-gradient(135deg, #FF6B00, #e85d04);
+      border: none; border-radius: 13px;
+      color: white; font-size: 14px; font-weight: 700;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer; transition: all 0.22s ease;
+      margin-top: 8px;
+      box-shadow: 0 5px 18px rgba(255,107,0,0.28);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(255,107,0,0.38); }
+    .btn-submit:active { transform: scale(0.98); }
+    .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .btn-spinner {
+      display: none; width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: white; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    .btn-submit.loading .btn-spinner { display: block; }
+    .btn-submit.loading .btn-text { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .form-footnote {
+      text-align: center; font-size: 11px; color: #94a3b8;
+      margin-top: 13px; line-height: 1.6;
+    }
+
+    /* Admin-specific */
+    .admin-badge-wrap {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 13px; padding: 12px 15px;
+      display: flex; align-items: center; gap: 11px; margin-bottom: 20px;
+    }
+    .admin-badge-icon {
+      width: 38px; height: 38px;
+      background: #fff7f0; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; flex-shrink: 0; border: 1px solid #fed7aa;
+    }
+    .admin-badge-info { font-size: 12px; }
+    .admin-badge-info strong { color: #1e293b; display: block; font-weight: 700; margin-bottom: 1px; }
+    .admin-badge-info span { color: #94a3b8; }
+
+    .demo-hint {
+      background: #eff6ff; border: 1px solid #bfdbfe;
+      border-radius: 11px; padding: 11px 14px;
+      display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px;
+    }
+    .demo-hint-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .demo-hint-body { font-size: 12px; color: #475569; line-height: 1.6; }
+    .demo-hint-body strong { color: #1d4ed8; }
+    .demo-hint-body code {
+      font-family: monospace; background: #dbeafe;
+      padding: 1px 6px; border-radius: 5px;
+      color: #1d4ed8; -webkit-user-select: all; -moz-user-select: all; user-select: all; cursor: pointer;
+    }
+
+    /* Responsive */
+    @media (max-width: 960px) {
+      .brand-panel { display: none; }
+      .form-panel {
+        flex: 1; border-left: none;
+        background: #ffffff;
+        padding: 32px 20px;
+        align-items: flex-start;
+      }
+      body { background: #ffffff; }
+    }
+
+    @media (max-width: 480px) {
+      .field-row, .field-row.cols-2 { grid-template-columns: 1fr; }
+      .form-panel { padding: 24px 16px; }
+      .form-panel-inner { max-width: 100%; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="portal-wrap">
+
+    <!-- ── Left Branding Panel ── -->
+    <div class="brand-panel">
+
+      <!-- Original Vexaro Logo on white card -->
+      <div class="brand-logo-area">
+        <img src="/assets/vexaro-logo-2JZ_0y43.jpeg" alt="Vexaro Courier Solution Private Limited Logo">
+      </div>
+
+      <!-- Body copy -->
+      <div class="brand-body">
+        <h1 class="brand-headline">Secure Identity<br><span>Verification Portal</span></h1>
+        <p class="brand-desc">
+          Complete your KYC in minutes using Aadhaar &amp; PAN Card.
+          Manage your logistics onboarding profile with real-time verification tracking.
+        </p>
+
+        <div class="brand-features">
+          <div class="brand-feature-item">
+            <div class="brand-feature-icon">🛡️</div>
+            <div class="brand-feature-text">
+              <h4>Bank-grade Encryption</h4>
+              <p>All documents are auto-redacted and secured with 256-bit AES encryption.</p>
+            </div>
+          </div>
+          <div class="brand-feature-item">
+            <div class="brand-feature-icon">⚡</div>
+            <div class="brand-feature-text">
+              <h4>Real-time Verification Status</h4>
+              <p>Live timeline updates as your documents move through the review pipeline.</p>
+            </div>
+          </div>
+          <div class="brand-feature-item">
+            <div class="brand-feature-icon">📄</div>
+            <div class="brand-feature-text">
+              <h4>Simplified Document Upload</h4>
+              <p>Drag &amp; drop Aadhaar (front &amp; back) and PAN Card with instant validation.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="brand-stats">
+        <div class="brand-stat">
+          <div class="brand-stat-num">12K+</div>
+          <div class="brand-stat-label">Verified Partners</div>
+        </div>
+        <div class="brand-stat">
+          <div class="brand-stat-num">99.8%</div>
+          <div class="brand-stat-label">Uptime SLA</div>
+        </div>
+        <div class="brand-stat">
+          <div class="brand-stat-num">&lt;4 hrs</div>
+          <div class="brand-stat-label">Avg. Review Time</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right Form Panel ── -->
+    <div class="form-panel">
+      <div class="form-panel-inner">
+
+        <!-- Header -->
+        <div class="form-header">
+          <h2>Welcome to Vexaro</h2>
+          <p>Sign in or register to access your KYC portal</p>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="tab-bar">
+          <button class="tab-item active" id="tab-user" onclick="switchTab('user')">
+            👤 User Portal
+          </button>
+          <button class="tab-item" id="tab-admin" onclick="switchTab('admin')">
+            🛡️ Admin Login
+          </button>
+        </div>
+
+        <!-- ─── User Form ─── -->
+        <div class="pane active" id="pane-user">
+          <form id="user-login-form" novalidate>
+
+            <!-- Profile Photo -->
+            <div class="photo-upload-wrap">
+              <div class="photo-circle" id="photo-upload-zone" title="Click to upload profile photo">
+                <div class="photo-circle-icon">📸</div>
+                <div class="photo-circle-label">Upload</div>
+                <img id="photo-preview" style="display:none;" alt="Profile preview">
+              </div>
+              <input type="file" id="user-photo-input" accept="image/jpeg,image/png,image/jpg" style="display:none;">
+              <div class="photo-hint">Click to add profile photo (optional)</div>
+            </div>
+
+            <!-- First Name + Last Name -->
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-firstname">First Name</label>
+                <input type="text" id="user-firstname" placeholder="e.g. Rahul" required>
+                <div class="field-err" id="err-user-firstname">Please enter your first name</div>
+              </div>
+              <div class="field">
+                <label for="user-lastname">Last Name</label>
+                <input type="text" id="user-lastname" placeholder="e.g. Sharma" required>
+                <div class="field-err" id="err-user-lastname">Please enter your last name</div>
+              </div>
+            </div>
+
+            <!-- Gender + Agency Name -->
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-gender">Gender</label>
+                <select id="user-gender">
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="user-agency">Agency Name</label>
+                <input type="text" id="user-agency" placeholder="Vexaro Courier and Cargo" required>
+                <div class="field-err" id="err-user-agency">Required</div>
+              </div>
+            </div>
+
+            <!-- Email + Mobile -->
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-email">Email Address</label>
+                <input type="email" id="user-email" placeholder="rahul@example.com" required>
+                <div class="field-err" id="err-user-email">Enter a valid email</div>
+              </div>
+              <div class="field">
+                <label for="user-mobile">Mobile Number</label>
+                <input type="tel" id="user-mobile" placeholder="10-digit mobile" required maxlength="10">
+                <div class="field-err" id="err-user-mobile">Enter valid 10-digit number</div>
+              </div>
+            </div>
+
+            <!-- Address Section -->
+            <div class="field" style="margin-top: 16px; margin-bottom: 8px;">
+              <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 4px;">Address</h3>
+            </div>
+
+            <div class="field">
+              <label for="user-address">Address Line 1</label>
+              <input type="text" id="user-address" placeholder="Flat / House No, Street, Area..." required>
+              <div class="field-err" id="err-user-address">Please enter Address Line 1</div>
+            </div>
+
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-address-line2">Address Line 2</label>
+                <input type="text" id="user-address-line2" placeholder="Locality / Landmark">
+              </div>
+              <div class="field">
+                <label for="user-state">State</label>
+                <input type="text" id="user-state" placeholder="e.g. Rajasthan" required>
+                <div class="field-err" id="err-user-state">Required</div>
+              </div>
+            </div>
+
+            <!-- Billing Address Section -->
+            <div class="field" style="margin-top: 20px; margin-bottom: 8px;">
+              <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 4px;">Billing Address</h3>
+            </div>
+
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-bill-address">Address Line 1</label>
+                <input type="text" id="user-bill-address" placeholder="Flat / House No, Street..." required>
+                <div class="field-err" id="err-user-bill-address">Required</div>
+              </div>
+              <div class="field">
+                <label for="user-bill-address2">Address Line 2</label>
+                <input type="text" id="user-bill-address2" placeholder="Locality / Area">
+              </div>
+            </div>
+
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-bill-landmark">Landmark</label>
+                <input type="text" id="user-bill-landmark" placeholder="e.g. Near Main Market">
+              </div>
+              <div class="field">
+                <label for="user-bill-city">City</label>
+                <input type="text" id="user-bill-city" placeholder="e.g. Udaipur" required>
+                <div class="field-err" id="err-user-bill-city">Required</div>
+              </div>
+            </div>
+
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-bill-state">State</label>
+                <input type="text" id="user-bill-state" placeholder="e.g. Rajasthan" required>
+                <div class="field-err" id="err-user-bill-state">Required</div>
+              </div>
+              <div class="field">
+                <label for="user-bill-pincode">PinCode</label>
+                <input type="text" id="user-bill-pincode" placeholder="6-digit PinCode" required maxlength="6">
+                <div class="field-err" id="err-user-bill-pincode">Required</div>
+              </div>
+            </div>
+
+            <!-- KYC Details Section -->
+            <div class="field" style="margin-top: 20px; margin-bottom: 8px;">
+              <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 4px;">KYC & Bank Details</h3>
+            </div>
+
+            <div class="field-row cols-2">
+              <div class="field">
+                <label for="user-aadhar">Aadhar Number</label>
+                <input type="text" id="user-aadhar" placeholder="12-digit Aadhar" required maxlength="12">
+                <div class="field-err" id="err-user-aadhar">Please enter valid Aadhar</div>
+              </div>
+              <div class="field">
+                <label for="user-pan">PAN Number</label>
+                <input type="text" id="user-pan" placeholder="10-digit PAN" required maxlength="10" style="text-transform: uppercase;">
+                <div class="field-err" id="err-user-pan">Please enter valid PAN</div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="user-bank">Bank Name</label>
+              <input type="text" id="user-bank" placeholder="e.g. State Bank of India" required>
+              <div class="field-err" id="err-user-bank">Required</div>
+            </div>
+
+            <button type="submit" class="btn-submit" id="btn-user-submit">
+              <div class="btn-spinner"></div>
+              <span class="btn-text">Continue to KYC Portal →</span>
+            </button>
+
+            <p class="form-footnote">
+              New users are registered automatically. Returning users will have their existing details pre-filled.
+            </p>
+          </form>
+        </div>
+
+        <!-- ─── Admin Form ─── -->
+        <div class="pane" id="pane-admin">
+          <div class="admin-badge-wrap">
+            <div class="admin-badge-icon">🛡️</div>
+            <div class="admin-badge-info">
+              <strong>Staff / Verification Desk</strong>
+              <span>Manage KYC approvals, rejections and portal access</span>
+            </div>
+          </div>
+
+          <form id="admin-login-form" novalidate>
+            <div class="field">
+              <label for="admin-email">Admin Email</label>
+              <input type="email" id="admin-email" value="admin@kycportal.com" readonly
+                style="cursor: not-allowed; opacity: 0.55;">
+            </div>
+
+            <div class="field">
+              <label for="admin-password">Password</label>
+              <input type="password" id="admin-password" placeholder="••••••••" required>
+              <div class="field-err" id="err-admin-password">Invalid password. Please try again.</div>
+            </div>
+
+            <div class="demo-hint">
+              <div class="demo-hint-icon">ℹ️</div>
+              <div class="demo-hint-body">
+                <strong>Demo credentials — </strong>
+                Password: <code>admin@kyc123</code>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-submit" id="btn-admin-submit">
+              <div class="btn-spinner"></div>
+              <span class="btn-text">Login as Admin →</span>
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/toast.js"></script>
+
+  <script>
+    initStorage();
+
+    // Redirect if already logged in
+    const currentSession = getSession();
+    if (currentSession) {
+      window.location.href = currentSession.role === 'admin'
+        ? 'admin-dashboard.html'
+        : 'user-profile.html';
+    }
+
+    // ── Tab switcher ──
+    function switchTab(role) {
+      ['user', 'admin'].forEach(r => {
+        document.getElementById('tab-' + r).classList.remove('active');
+        document.getElementById('pane-' + r).classList.remove('active');
+      });
+      document.getElementById('tab-' + role).classList.add('active');
+      document.getElementById('pane-' + role).classList.add('active');
+    }
+
+    // ── Pre-fill form for returning users on email blur ──
+    window.addEventListener('DOMContentLoaded', () => {
+      const emailInput = document.getElementById('user-email');
+      emailInput.addEventListener('blur', () => {
+        const email = emailInput.value.trim();
+        if (!email) return;
+        const existing = getUserByEmail(email);
+        if (!existing) return;
+
+        // Pre-fill personal details
+        document.getElementById('user-firstname').value  = existing.firstName || existing.name.split(' ')[0] || '';
+        document.getElementById('user-lastname').value   = existing.lastName  || existing.name.split(' ').slice(1).join(' ') || '';
+        document.getElementById('user-gender').value     = existing.gender    || 'male';
+        document.getElementById('user-agency').value     = existing.agencyName || '';
+        document.getElementById('user-mobile').value     = existing.mobile    || '';
+
+        // Pre-fill address details
+        document.getElementById('user-address').value       = existing.address     || '';
+        document.getElementById('user-address-line2').value = existing.addressLine2 || '';
+        document.getElementById('user-state').value         = existing.state        || '';
+
+        // Pre-fill billing address
+        document.getElementById('user-bill-address').value  = existing.billAddress  || '';
+        document.getElementById('user-bill-address2').value = existing.billAddress2 || '';
+        document.getElementById('user-bill-landmark').value = existing.billLandmark || '';
+        document.getElementById('user-bill-city').value     = existing.billCity     || '';
+        document.getElementById('user-bill-state').value    = existing.billState    || '';
+        document.getElementById('user-bill-pincode').value  = existing.billPinCode  || '';
+
+        // Pre-fill KYC details
+        document.getElementById('user-aadhar').value = existing.aadharNum || '';
+        document.getElementById('user-pan').value    = existing.panNum    || '';
+        document.getElementById('user-bank').value   = existing.bankName  || '';
+
+        // Pre-fill profile photo if exists
+        if (existing.profilePhoto) {
+          const photoPreview = document.getElementById('photo-preview');
+          const photoZone = document.getElementById('photo-upload-zone');
+          profilePhotoB64 = existing.profilePhoto;
+          photoPreview.src = existing.profilePhoto;
+          photoPreview.style.display = 'block';
+          photoZone.querySelector('.photo-circle-icon').style.display = 'none';
+          photoZone.querySelector('.photo-circle-label').style.display = 'none';
+        }
+
+        showToast('✅ Welcome back! Your details have been pre-filled.', 'success');
+      });
+    });
+
+    // ── Profile photo upload ──
+    const photoZone    = document.getElementById('photo-upload-zone');
+    const photoInput   = document.getElementById('user-photo-input');
+    const photoPreview = document.getElementById('photo-preview');
+    let profilePhotoB64 = null;
+
+    photoZone.addEventListener('click', () => photoInput.click());
+    photoInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!isValidImageFile(file)) {
+        showToast('❌ Only JPG/PNG images under 5MB allowed.', 'error'); return;
+      }
+      try {
+        profilePhotoB64 = await compressAndGetBase64(file);
+        photoPreview.src = profilePhotoB64;
+        photoPreview.style.display = 'block';
+        photoZone.querySelector('.photo-circle-icon').style.display = 'none';
+        photoZone.querySelector('.photo-circle-label').style.display = 'none';
+        showToast('✅ Profile photo added!', 'success');
+      } catch { showToast('❌ Error reading file.', 'error'); }
+    });
+
+    // ── Helper: show/hide field errors ──
+    function setErr(id, show) {
+      const el = document.getElementById(id);
+      if (el) el.classList[show ? 'add' : 'remove']('show');
+      const input = document.getElementById(id.replace('err-', ''));
+      if (input) input.classList[show ? 'add' : 'remove']('error');
+    }
+
+    // ── User form submission ──
+    document.getElementById('user-login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const firstName     = document.getElementById('user-firstname').value.trim();
+      const lastName      = document.getElementById('user-lastname').value.trim();
+      const gender        = document.getElementById('user-gender').value;
+      const agencyName    = document.getElementById('user-agency').value.trim();
+      const email         = document.getElementById('user-email').value.trim();
+      
+      // Sanitizer: strip spaces, dashes, and standard country codes from mobile number
+      let mobile          = document.getElementById('user-mobile').value.trim().replace(/\s|-/g, '');
+      if (mobile.startsWith('+91')) mobile = mobile.slice(3);
+      if (mobile.startsWith('0'))   mobile = mobile.slice(1);
+      
+      const address       = document.getElementById('user-address').value.trim();
+      const addressLine2  = document.getElementById('user-address-line2').value.trim();
+      const state         = document.getElementById('user-state').value.trim();
+      
+      const billAddress   = document.getElementById('user-bill-address').value.trim();
+      const billAddress2  = document.getElementById('user-bill-address2').value.trim();
+      const billLandmark  = document.getElementById('user-bill-landmark').value.trim();
+      const billCity      = document.getElementById('user-bill-city').value.trim();
+      const billState     = document.getElementById('user-bill-state').value.trim();
+      const billPinCode   = document.getElementById('user-bill-pincode').value.trim();
+      
+      // Sanitizer: strip spaces and dashes from Aadhar and PAN numbers
+      const aadharNum     = document.getElementById('user-aadhar').value.trim().replace(/\s|-/g, '');
+      const panNum        = document.getElementById('user-pan').value.trim().toUpperCase().replace(/\s|-/g, '');
+      const bankName      = document.getElementById('user-bank').value.trim();
+
+      const name = `${firstName} ${lastName}`.trim();
+      const city = billCity; // default city to billing city
+
+      const fields = [
+        'user-firstname', 'user-lastname', 'user-agency', 'user-email', 'user-mobile',
+        'user-address', 'user-state', 'user-bill-address', 'user-bill-city', 
+        'user-bill-state', 'user-bill-pincode', 'user-aadhar', 'user-pan', 'user-bank'
+      ];
+      fields.forEach(id => setErr('err-' + id, false));
+
+      let valid = true;
+      if (!firstName) { 
+        setErr('err-user-firstname', true); 
+        showToast('⚠️ First Name is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!lastName) { 
+        setErr('err-user-lastname', true); 
+        showToast('⚠️ Last Name is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!agencyName) { 
+        setErr('err-user-agency', true); 
+        showToast('⚠️ Agency Name is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!validateEmail(email)) { 
+        setErr('err-user-email', true); 
+        showToast('⚠️ Please enter a valid Email Address.', 'warning'); 
+        valid = false; 
+      }
+      else if (!validateMobile(mobile)) { 
+        setErr('err-user-mobile', true); 
+        showToast('⚠️ Please enter a valid 10-digit Mobile Number.', 'warning'); 
+        valid = false; 
+      }
+      else if (!address) { 
+        setErr('err-user-address', true); 
+        showToast('⚠️ Address Line 1 is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!state) { 
+        setErr('err-user-state', true); 
+        showToast('⚠️ State is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!billAddress) { 
+        setErr('err-user-bill-address', true); 
+        showToast('⚠️ Billing Address Line 1 is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!billCity) { 
+        setErr('err-user-bill-city', true); 
+        showToast('⚠️ Billing City is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!billState) { 
+        setErr('err-user-bill-state', true); 
+        showToast('⚠️ Billing State is required.', 'warning'); 
+        valid = false; 
+      }
+      else if (!validatePincode(billPinCode)) { 
+        setErr('err-user-bill-pincode', true); 
+        showToast('⚠️ Please enter a valid 6-digit Pincode.', 'warning'); 
+        valid = false; 
+      }
+      else if (aadharNum.length !== 12) { 
+        setErr('err-user-aadhar', true); 
+        showToast('⚠️ Aadhar Number must be exactly 12 digits.', 'warning'); 
+        valid = false; 
+      }
+      else if (panNum.length !== 10) { 
+        setErr('err-user-pan', true); 
+        showToast('⚠️ PAN Number must be exactly 10 characters.', 'warning'); 
+        valid = false; 
+      }
+      else if (!bankName) { 
+        setErr('err-user-bank', true); 
+        showToast('⚠️ Bank Name is required.', 'warning'); 
+        valid = false; 
+      }
+      if (!valid) return;
+
+      const btn = document.getElementById('btn-user-submit');
+      btn.classList.add('loading'); btn.disabled = true;
+
+      setTimeout(async () => {
+        let user = getUserByEmail(email);
+        const userData = {
+          name, firstName, lastName, gender, agencyName, email, mobile,
+          address, addressLine2, state, city,
+          billAddress, billAddress2, billLandmark, billCity, billState, billPinCode,
+          aadharNum, panNum, bankName,
+          profilePhoto: profilePhotoB64
+        };
+
+        try {
+          if (!user) {
+            user = await createUser(userData);
+            logActivity(user.id, user.name, 'Registered profile on portal', {}, '👤');
+            showToast('✅ Account registered!', 'success');
+          } else {
+            user = await updateUser(user.id, userData);
+            logActivity(user.id, user.name, 'Logged into portal', {}, '🔑');
+            showToast('✅ Welcome back, ' + user.name + '!', 'success');
+          }
+          createUserSession(user);
+          window.location.href = 'user-profile.html';
+        } catch (err) {
+          console.error(err);
+          showToast('❌ Connection error. Please check if the backend is running.', 'error');
+          btn.classList.remove('loading');
+          btn.disabled = false;
+        }
+      }, 1000);
+    });
+
+    // ── Admin form submission ──
+    document.getElementById('admin-login-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const pwd = document.getElementById('admin-password').value;
+      setErr('err-admin-password', false);
+
+      if (pwd !== ADMIN_PASSWORD) {
+        setErr('err-admin-password', true);
+        showToast('❌ Invalid Admin Password', 'error'); return;
+      }
+
+      const btn = document.getElementById('btn-admin-submit');
+      btn.classList.add('loading'); btn.disabled = true;
+
+      setTimeout(() => {
+        createAdminSession();
+        logActivity('admin', 'Admin', 'Admin logged in', {}, '🛡️');
+        showToast('✅ Welcome, Admin!', 'success');
+        window.location.href = 'admin-dashboard.html';
+      }, 1000);
+    });
+
+    // ── Real-time input formatters and error clearers ──
+    const fieldsToWatch = [
+      'user-firstname', 'user-lastname', 'user-agency', 'user-email', 'user-mobile',
+      'user-address', 'user-state', 'user-bill-address', 'user-bill-city', 
+      'user-bill-state', 'user-bill-pincode', 'user-aadhar', 'user-pan', 'user-bank'
+    ];
+    fieldsToWatch.forEach(id => {
+      const input = document.getElementById(id);
+      if (input) {
+        input.addEventListener('input', () => {
+          setErr('err-' + id, false);
+        });
+      }
+    });
+
+    // Force Aadhar to only accept digits
+    const aadharInput = document.getElementById('user-aadhar');
+    if (aadharInput) {
+      aadharInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/\D/g, '');
+      });
+    }
+
+    // Force PAN to uppercase alphanumeric and strip invalid symbols
+    const panInput = document.getElementById('user-pan');
+    if (panInput) {
+      panInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      });
+    }
+  </script>
+</body>
 </html>

@@ -269,12 +269,56 @@
         document.getElementById('skeleton-loader-container').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
         logActivity(session.userId, session.name, 'Viewed profile page', {}, '👤');
-      }, 1000);
+
+        // Re-render the action card 2.5s later to pick up any completed
+        // background sync (e.g. initStorageFromBackend) without clobbering UI
+        setTimeout(() => {
+          const refreshed = getUserById(session.userId);
+          if (refreshed && currentUser && refreshed.kycStatus !== currentUser.kycStatus) {
+            currentUser = refreshed;
+            currentKYC  = getKYCByUserId(currentUser.id);
+            renderActionCard();
+            renderTimeline();
+            document.getElementById('kyc-badge-container').innerHTML = getStatusBadge(currentUser.kycStatus);
+            document.getElementById('stat-kyc-status').textContent = currentUser.kycStatus.replace('_', ' ').toUpperCase();
+          }
+        }, 2500);
+      }, 800);
     });
 
     function loadUserData() {
       currentUser = getUserById(session.userId);
+      if (!currentUser && session.email) {
+        currentUser = getUserByEmail(session.email);
+      }
       if (!currentUser) { logout(); return; }
+
+      // ── RACE-CONDITION GUARD ──
+      // If the user just submitted KYC, a background initStorageFromBackend() call
+      // may have already overwritten the locally-set kycStatus='pending' with the
+      // stale backend value 'not_started'. Honour the sessionStorage flag as the
+      // definitive source of truth and repair localStorage before rendering.
+      const justSubmitted = sessionStorage.getItem('kyc_just_submitted');
+      const committedStatus = sessionStorage.getItem('kyc_pending_status');
+      if (justSubmitted === 'true' && committedStatus) {
+        if (currentUser.kycStatus !== committedStatus) {
+          // Repair the record in localStorage
+          const allUsers = getUsers();
+          const idx = allUsers.findIndex(u => u.id === currentUser.id || u.email === currentUser.email);
+          if (idx !== -1) {
+            allUsers[idx].kycStatus = committedStatus;
+            allUsers[idx].updatedAt = Date.now();
+            saveUsers(allUsers);
+            currentUser = allUsers[idx];
+          } else {
+            currentUser.kycStatus = committedStatus;
+          }
+        }
+        // Clear the one-time flags so future visits aren't affected
+        sessionStorage.removeItem('kyc_just_submitted');
+        sessionStorage.removeItem('kyc_pending_status');
+      }
+
       currentKYC = getKYCByUserId(currentUser.id);
 
       // Header banner
@@ -487,7 +531,7 @@
       }
     }
 
-    document.getElementById('details-edit-mode').addEventListener('submit', (e) => {
+    document.getElementById('details-edit-mode').addEventListener('submit', async (e) => {
       e.preventDefault();
       const firstName  = document.getElementById('edit-first-name').value.trim();
       const lastName   = document.getElementById('edit-last-name').value.trim();
@@ -511,14 +555,19 @@
       if (!validatePincode(pincode))  { document.getElementById('err-edit-pincode').classList.add('show'); valid = false; }
       if (!valid) { showToast('⚠️ Please fill all required fields correctly.', 'warning'); return; }
 
-      const updated = updateUser(currentUser.id, { name, firstName, lastName, gender, mobile, agencyName, amazonTag, address, city, state, pincode });
-      if (updated) {
-        session.name = name;
-        sessionStorage.setItem('kyc_session', JSON.stringify(session));
-        logActivity(currentUser.id, name, 'Updated profile details', {}, '✏️');
-        showToast('✅ Profile updated successfully!', 'success');
-        loadUserData();
-        toggleEditMode(false);
+      try {
+        const updated = await updateUser(currentUser.id, { name, firstName, lastName, gender, mobile, agencyName, amazonTag, address, city, state, pincode });
+        if (updated) {
+          session.name = name;
+          sessionStorage.setItem('kyc_session', JSON.stringify(session));
+          logActivity(currentUser.id, name, 'Updated profile details', {}, '✏️');
+          showToast('✅ Profile updated successfully!', 'success');
+          loadUserData();
+          toggleEditMode(false);
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('❌ Failed to update profile. Connection error.', 'error');
       }
     });
 

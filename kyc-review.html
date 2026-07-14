@@ -327,42 +327,57 @@
       modalBtn.disabled = true;
 
       // Create new KYC submission
-      setTimeout(() => {
-        const kycRecord = createKYC({
-          userId: currentUser.id,
-          aadhaarFront: kycDraft.aadhaarFront,
-          aadhaarBack: kycDraft.aadhaarBack,
-          panCard: kycDraft.panCard,
-          timeline: [
-            { step: 'Profile Completed', completedAt: currentUser.createdAt, status: 'completed' },
-            { step: 'Documents Uploaded', completedAt: Date.now() - 30000, status: 'completed' },
-            { step: 'Review Completed', completedAt: Date.now() - 10000, status: 'completed' },
-            { step: 'KYC Submitted', completedAt: Date.now(), status: 'completed' },
-            { step: 'Under Verification', completedAt: null, status: 'active' },
-            { step: 'Verification Decision', completedAt: null, status: 'pending' }
-          ]
-        });
+      setTimeout(async () => {
+        try {
+          const kycRecord = await createKYC({
+            userId: currentUser.id,
+            aadhaarFront: kycDraft.aadhaarFront,
+            aadhaarBack: kycDraft.aadhaarBack,
+            panCard: kycDraft.panCard,
+            timeline: [
+              { step: 'Profile Completed', completedAt: currentUser.createdAt, status: 'completed' },
+              { step: 'Documents Uploaded', completedAt: Date.now() - 30000, status: 'completed' },
+              { step: 'Review Completed', completedAt: Date.now() - 10000, status: 'completed' },
+              { step: 'KYC Submitted', completedAt: Date.now(), status: 'completed' },
+              { step: 'Under Verification', completedAt: null, status: 'active' },
+              { step: 'Verification Decision', completedAt: null, status: 'pending' }
+            ]
+          });
 
-        // Update User KYC profile links
-        updateUser(currentUser.id, {
-          kycStatus: 'pending',
-          kycId: kycRecord.id
-        });
+          // Update User KYC profile links
+          await updateUser(currentUser.id, {
+            kycStatus: 'pending',
+            kycId: kycRecord.id
+          });
 
-        // Log Activity log
-        logActivity(currentUser.id, currentUser.name, 'Submitted KYC files for validation', { kycId: kycRecord.id }, '📤');
-        
-        // Remove draft uploads from cache
-        removeKycDraft(draftKey);
+          // ── Stamp a session flag so user-profile.html always shows the correct
+          //    pending state even if a background backend-sync races against us ──
+          sessionStorage.setItem('kyc_just_submitted', 'true');
+          sessionStorage.setItem('kyc_pending_status', 'pending');
+          // Clear last-sync timestamp so the next background sync fetches fresh
+          // data from the database (which will now have kycStatus=pending as well)
+          localStorage.removeItem('kyc_last_sync');
 
-        showToast('✅ KYC Submitted Successfully! Verification pending.', 'success');
-        
-        // Close modal and redirect
-        closeConfirmationModal();
-        setTimeout(() => {
-          window.location.href = 'user-profile.html';
-        }, 1500);
+          // Log Activity log
+          logActivity(currentUser.id, currentUser.name, 'Submitted KYC files for validation', { kycId: kycRecord.id }, '📤');
+          
+          // Remove draft uploads from cache
+          removeKycDraft(draftKey);
 
+          showToast('✅ KYC Submitted Successfully! Verification pending.', 'success');
+          
+          // Close modal and redirect
+          closeConfirmationModal();
+          setTimeout(() => {
+            window.location.href = 'user-profile.html';
+          }, 1500);
+        } catch (err) {
+          console.error(err);
+          showToast('❌ Failed to submit KYC. Connection error.', 'error');
+          submitBtn.classList.remove('btn-loading');
+          modalBtn.classList.remove('btn-loading');
+          modalBtn.disabled = false;
+        }
       }, 1500); // 1.5s simulated processing time
     }
   </script>

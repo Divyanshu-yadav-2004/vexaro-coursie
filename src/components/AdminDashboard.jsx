@@ -102,31 +102,28 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     setIsPIIRevealed(!isPIIRevealed);
   };
 
-  const normalizeWhatsAppNumber = (mobile) => {
-    const digits = String(mobile || '').replace(/\D/g, '');
-    if (!digits) return '';
-    return digits.length === 10 ? `91${digits}` : digits;
-  };
-
-  const openKycApprovedWhatsApp = (client) => {
-    const whatsappNumber = normalizeWhatsAppNumber(client?.mobile);
-    if (!whatsappNumber) return;
-
-    const message = encodeURIComponent(
-      `Hello ${client.name || 'Customer'}, your KYC verification has been completed and approved by Vexaro Courier Solution Private Limited. You can now continue using your account.`
-    );
-    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank', 'noopener');
+  const describeWhatsAppResult = (whatsapp) => {
+    if (!whatsapp) return 'WhatsApp notification result unavailable.';
+    if (whatsapp.sent) {
+      return `WhatsApp notification sent via ${whatsapp.mode || 'api'}${whatsapp.messageId ? ` (message ${whatsapp.messageId})` : ''}.`;
+    }
+    if (whatsapp.skipped) {
+      return `WhatsApp notification skipped: ${whatsapp.reason || 'not_applicable'}.`;
+    }
+    return `WhatsApp notification failed: ${whatsapp.reason || 'unknown_error'}.`;
   };
 
   const handleApprove = async () => {
     if (!selectedClient) return;
     try {
-      const updatedRecord = await updateKYCStatus(selectedRecord.id, 'approved');
+      const result = await updateKYCStatus(selectedRecord.id, 'approved');
+      const updatedRecord = result.kyc;
+      const whatsappSummary = describeWhatsAppResult(result.whatsapp);
       // Log action
       const newLog = {
         timestamp: new Date().toLocaleTimeString(),
         actor: currentUser.email,
-        action: `KYC APPROVED: Client ${selectedClient.name} verification completed.`,
+        action: `KYC APPROVED: Client ${selectedClient.name} verification completed. ${whatsappSummary}`,
         level: 'INFO'
       };
       setAuditLogs(prev => [newLog, ...prev]);
@@ -134,7 +131,6 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       await loadData();
       setSelectedClient(prev => ({ ...prev, kycStatus: 'approved' }));
       setSelectedRecord(updatedRecord);
-      openKycApprovedWhatsApp(selectedClient);
     } catch (err) {
       console.error('Approve failed:', err);
     }
@@ -144,7 +140,8 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     e.preventDefault();
     if (!selectedClient || !rejectionReason.trim()) return;
     try {
-      const updatedRecord = await updateKYCStatus(selectedRecord.id, 'rejected', rejectionReason);
+      const result = await updateKYCStatus(selectedRecord.id, 'rejected', rejectionReason);
+      const updatedRecord = result.kyc;
 
     // Log action
     const newLog = {

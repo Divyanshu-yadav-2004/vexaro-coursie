@@ -312,23 +312,53 @@
     let currentFilter = 'all'; // 'all', 'pending', 'approved', 'rejected'
     let searchQuery = '';
     let currentSort = 'latest'; // 'latest', 'oldest', 'name', 'status'
+    let adminRefreshTimer = null;
 
-    // Load elements with simulated loader
-    window.addEventListener('DOMContentLoaded', () => {
-      setTimeout(() => {
-        loadDashboardData();
+    // Re-render whenever the admin data cache is refreshed from the DB
+    window.addEventListener('vexaro-admin-data-refreshed', () => {
+      loadDashboardData();
+      animateCharts();
+    });
+
+    // Load elements: await DB fetch first, then show content
+    window.addEventListener('DOMContentLoaded', async () => {
+      // refreshAdminDataFromDatabase is defined in storage.js;
+      // it fetches from /api/sync (forceFull=true, replaceCache=true)
+      // and dispatches 'vexaro-admin-data-refreshed' on success.
+      try {
+        await ensureAdminDataLoaded({ silent: false });
+      } catch (err) {
+        // DB unreachable — fall through to render empty state with offline banner
+        console.warn('Admin DB refresh failed on load:', err.message);
+      } finally {
         document.getElementById('skeleton-container').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
-        
-        // Initial charts animation trigger
+        loadDashboardData();
         animateCharts();
-      }, 800);
+        if (!adminRefreshTimer) {
+          adminRefreshTimer = setInterval(() => {
+            refreshAdminDataFromDatabase({ silent: true }).catch(err => {
+              console.warn('Admin background refresh failed:', err.message);
+            });
+          }, 30000);
+        }
+      }
     });
 
     function loadDashboardData() {
       // Reload raw records
       usersList = getUsers().filter(u => u.role !== 'admin');
       kycRecordsList = getKYCRecords();
+      console.log('[admin-dashboard] loaded data from cache/database response', {
+        users: usersList.length,
+        kycRecords: kycRecordsList.length,
+        latestKyc: kycRecordsList[0] ? {
+          id: kycRecordsList[0].id,
+          userId: kycRecordsList[0].userId,
+          status: kycRecordsList[0].status,
+          submittedAt: kycRecordsList[0].submittedAt
+        } : null
+      });
 
       // Set Cards numbers
       const stats = getKYCStats();
@@ -439,6 +469,13 @@
       }
 
       filteredRecords = records;
+      console.log('[admin-dashboard] rendered table dataset', {
+        filter: currentFilter,
+        searchQuery,
+        sort: currentSort,
+        rows: filteredRecords.length,
+        rowsWithKyc: filteredRecords.filter(r => Boolean(r.kyc)).length
+      });
       currentPage = 1; // Reset page
       renderTable();
     }

@@ -862,7 +862,7 @@
       const btn = document.getElementById('btn-user-submit');
       btn.classList.add('loading'); btn.disabled = true;
 
-      setTimeout(() => {
+      setTimeout(async () => {
         let user = getUserByEmail(email);
         const userData = {
           name, firstName, lastName, gender, agencyName, email, mobile,
@@ -872,17 +872,24 @@
           profilePhoto: profilePhotoB64
         };
 
-        if (!user) {
-          user = createUser(userData);
-          logActivity(user.id, user.name, 'Registered profile on portal', {}, '👤');
-          showToast('✅ Account registered!', 'success');
-        } else {
-          user = updateUser(user.id, userData);
-          logActivity(user.id, user.name, 'Logged into portal', {}, '🔑');
-          showToast('✅ Welcome back, ' + user.name + '!', 'success');
+        try {
+          if (!user) {
+            user = await createUser(userData);
+            logActivity(user.id, user.name, 'Registered profile on portal', {}, '👤');
+            showToast('✅ Account registered!', 'success');
+          } else {
+            user = await updateUser(user.id, userData);
+            logActivity(user.id, user.name, 'Logged into portal', {}, '🔑');
+            showToast('✅ Welcome back, ' + user.name + '!', 'success');
+          }
+          createUserSession(user);
+          window.location.href = 'user-profile.html';
+        } catch (err) {
+          console.error(err);
+          showToast('❌ Connection error. Please check if the backend is running.', 'error');
+          btn.classList.remove('loading');
+          btn.disabled = false;
         }
-        createUserSession(user);
-        window.location.href = 'user-profile.html';
       }, 1000);
     });
 

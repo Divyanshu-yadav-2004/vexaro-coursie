@@ -246,18 +246,22 @@
     let currentKYC = null;
     let targetUser = null;
 
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       if (!requestId && !userIdParam) {
         showToast('❌ Invalid KYC details request.', 'error');
         setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 1500);
         return;
       }
 
-      setTimeout(() => {
+      try {
+        await ensureAdminDataLoaded({ silent: false });
+      } catch (err) {
+        console.warn('Admin DB refresh failed on detail page:', err.message);
+      } finally {
         loadKYCRecord();
         document.getElementById('skeleton-container').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
-      }, 800);
+      }
     });
 
     function getUserField(user, ...keys) {
@@ -311,6 +315,17 @@
 
     function getKycApprovedWhatsAppMessage(displayName) {
       return `Hello ${displayName || 'Customer'}, your KYC verification has been completed and approved by Vexaro Courier Solution Private Limited. You can now continue using your account.`;
+    }
+
+    function describeWhatsAppNotification(whatsapp) {
+      if (!whatsapp) return 'WhatsApp notification result unavailable.';
+      if (whatsapp.sent) {
+        return `WhatsApp notification sent${whatsapp.messageId ? ` (message ${whatsapp.messageId})` : ''}.`;
+      }
+      if (whatsapp.skipped) {
+        return `WhatsApp notification skipped: ${whatsapp.reason || 'not_applicable'}.`;
+      }
+      return `WhatsApp notification failed: ${whatsapp.reason || 'unknown_error'}.`;
     }
 
     function openKycApprovedWhatsApp(displayName) {
@@ -634,7 +649,7 @@
       }
     }
 
-    function approveVerificationRequest() {
+    async function approveVerificationRequest() {
       const displayName = getDisplayName();
       if (!confirm(`Are you sure you want to APPROVE ${displayName}'s KYC verification request?`)) return;
 
@@ -650,29 +665,34 @@
         { step: 'Approved ✓', completedAt: now, status: 'completed' }
       ];
 
-      // Update KYC Record
-      updateKYC(currentKYC.id, {
-        status: 'approved',
-        reviewedAt: now,
-        reviewedBy: 'Owner',
-        approvedOn: now,
-        rejectionReason: null,
-        timeline: updatedTimeline
-      });
+      try {
+        // Update KYC Record
+        const approvedKyc = await updateKYC(currentKYC.id, {
+          status: 'approved',
+          reviewedAt: now,
+          reviewedBy: 'Owner',
+          approvedOn: now,
+          rejectionReason: null,
+          timeline: updatedTimeline
+        });
 
-      // Update User
-      updateUser(targetUser.id, { kycStatus: 'approved' });
+        // Update User
+        await updateUser(targetUser.id, { kycStatus: 'approved' });
 
-      // Logging
-      logActivity(targetUser.id, displayName, 'KYC Approved by Verification Desk (Owner)', {}, '✅');
-      logActivity('admin', 'Admin', `Approved KYC for user: ${displayName}`, { userId: targetUser.id }, '✅');
+        // Logging
+        logActivity(targetUser.id, displayName, 'KYC Approved by Verification Desk (Owner)', {}, '✅');
+        logActivity('admin', 'Admin', `Approved KYC for user: ${displayName}`, { userId: targetUser.id }, '✅');
 
-      showToast('✅ KYC Verification Approved successfully!', 'success');
-      openKycApprovedWhatsApp(displayName);
-      loadKYCRecord();
+        const whatsappSummary = describeWhatsAppNotification(approvedKyc && approvedKyc.whatsapp);
+        showToast(`✅ KYC Verification Approved successfully! ${whatsappSummary}`, approvedKyc?.whatsapp?.sent ? 'success' : 'warning');
+        loadKYCRecord();
+      } catch (err) {
+        console.error(err);
+        showToast('❌ Failed to approve verification. Connection error.', 'error');
+      }
     }
 
-    function confirmRejectionRequest() {
+    async function confirmRejectionRequest() {
       const reasonEl = document.getElementById('rejection-reason-text');
       const errorEl = document.getElementById('err-reject-reason');
       const reason = reasonEl.value.trim();
@@ -698,27 +718,32 @@
         { step: 'Rejected ✗', completedAt: now, status: 'rejected' }
       ];
 
-      // Update KYC Record
-      updateKYC(currentKYC.id, {
-        status: 'rejected',
-        reviewedAt: now,
-        reviewedBy: 'Owner',
-        rejectionReason: reason,
-        timeline: updatedTimeline
-      });
+      try {
+        // Update KYC Record
+        await updateKYC(currentKYC.id, {
+          status: 'rejected',
+          reviewedAt: now,
+          reviewedBy: 'Owner',
+          rejectionReason: reason,
+          timeline: updatedTimeline
+        });
 
-      // Update User Status
-      updateUser(targetUser.id, { kycStatus: 'rejected' });
+        // Update User Status
+        await updateUser(targetUser.id, { kycStatus: 'rejected' });
 
-      // Log Activities
-      logActivity(targetUser.id, displayName, `KYC Rejected by verification desk. Reason: ${reason}`, { reason }, '❌');
-      logActivity('admin', 'Admin', `Rejected KYC for user: ${displayName}. Reason: ${reason}`, { userId: targetUser.id }, '❌');
+        // Log Activities
+        logActivity(targetUser.id, displayName, `KYC Rejected by verification desk. Reason: ${reason}`, { reason }, '❌');
+        logActivity('admin', 'Admin', `Rejected KYC for user: ${displayName}. Reason: ${reason}`, { userId: targetUser.id }, '❌');
 
-      showToast('❌ KYC Verification Rejected.', 'error');
-      loadKYCRecord();
+        showToast('❌ KYC Verification Rejected.', 'error');
+        loadKYCRecord();
+      } catch (err) {
+        console.error(err);
+        showToast('❌ Failed to reject verification. Connection error.', 'error');
+      }
     }
 
-    function revertToPending() {
+    async function revertToPending() {
       const displayName = getDisplayName();
       if (!confirm(`Revert ${displayName}'s KYC status back to PENDING verification review?`)) return;
 
@@ -734,25 +759,30 @@
         { step: 'Verification Decision', completedAt: null, status: 'pending' }
       ];
 
-      // Update KYC
-      updateKYC(currentKYC.id, {
-        status: 'pending',
-        reviewedAt: null,
-        reviewedBy: null,
-        approvedOn: null,
-        rejectionReason: null,
-        timeline: updatedTimeline
-      });
+      try {
+        // Update KYC
+        await updateKYC(currentKYC.id, {
+          status: 'pending',
+          reviewedAt: null,
+          reviewedBy: null,
+          approvedOn: null,
+          rejectionReason: null,
+          timeline: updatedTimeline
+        });
 
-      // Update User
-      updateUser(targetUser.id, { kycStatus: 'pending' });
+        // Update User
+        await updateUser(targetUser.id, { kycStatus: 'pending' });
 
-      // Log activity
-      logActivity(targetUser.id, displayName, 'KYC status reverted back to Pending state', {}, '⏳');
-      logActivity('admin', 'Admin', `Reverted KYC status back to pending for ${displayName}`, { userId: targetUser.id }, '⏳');
+        // Log activity
+        logActivity(targetUser.id, displayName, 'KYC status reverted back to Pending state', {}, '⏳');
+        logActivity('admin', 'Admin', `Reverted KYC status back to pending for ${displayName}`, { userId: targetUser.id }, '⏳');
 
-      showToast('⏳ KYC status reverted to Pending.', 'info');
-      loadKYCRecord();
+        showToast('⏳ KYC status reverted to Pending.', 'info');
+        loadKYCRecord();
+      } catch (err) {
+        console.error(err);
+        showToast('❌ Failed to revert verification. Connection error.', 'error');
+      }
     }
   </script>
 </body>

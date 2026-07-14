@@ -11,6 +11,8 @@ const syncRoutes  = require('./routes/sync');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const BODY_LIMIT_MB = process.env.BODY_LIMIT_MB || 30;
+const BODY_LIMIT = `${BODY_LIMIT_MB}mb`;
 
 // ─── CORS ─────────────────────────────────────────────────────
 app.use(cors({
@@ -27,8 +29,8 @@ app.use(cors({
 }));
 
 // ─── Body Parsing ─────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 
 // ─── Static: Serve Uploaded Files ────────────────────────────
 // Files accessible at: GET /uploads/<filename>
@@ -64,6 +66,17 @@ app.use((req, res) => {
 
 // ─── Global Error Handler ────────────────────────────────────
 app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') {
+    console.error('Request body too large:', {
+      method: req.method,
+      path: req.path,
+      limit: BODY_LIMIT,
+      length: err.length
+    });
+    return res.status(413).json({
+      error: `Request body too large. Maximum size is ${BODY_LIMIT}`
+    });
+  }
   // Multer file size error
   if (err.code === 'LIMIT_FILE_SIZE') {
     return res.status(413).json({

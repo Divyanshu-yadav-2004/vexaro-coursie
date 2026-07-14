@@ -137,7 +137,7 @@ export async function updateKYCStatus(kycId, status, rejectionReason = '') {
     method: 'PATCH',
     body: JSON.stringify({ status, rejectionReason }),
   });
-  return data.kyc;
+  return data;
 }
 
 // ─── USERS ────────────────────────────────────────────────────
