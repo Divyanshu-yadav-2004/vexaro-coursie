@@ -14,7 +14,7 @@ function getBackendApiBase() {
   // Always use localhost:5000/api for local development regardless of frontend port
   if (isLocalHost) return 'http://localhost:5000/api';
 
-  return `${window.location.origin}/api`;
+ return 'https://api.vexaro.co.in';
 }
 
 const BACKEND_URL = `${getBackendApiBase()}/sync`;
