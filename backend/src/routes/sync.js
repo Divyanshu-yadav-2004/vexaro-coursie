@@ -4,10 +4,11 @@ const { sendKycApprovedWhatsApp } = require('../services/whatsapp');
 const router = express.Router();
 
 // Helper for consistent error responses
-function fail(res, code, message) {
+function fail(res, code, message, details = null) {
   return res.status(code).json({
     success: false,
-    message: message
+    message: message,
+    ...(details ? { details } : {})
   });
 }
 
@@ -341,9 +342,6 @@ router.post('/kyc', async (req, res) => {
   console.log('[sync:kyc] incoming request', summarizeKycPayload(k));
 
   if (!k.email) return fail(res, 400, 'User email is required to associate KYC record');
-  if (!k.aadhaarFront || !k.aadhaarBack || !k.panCard) {
-    return fail(res, 400, 'aadhaarFront, aadhaarBack, and panCard are required');
-  }
 
   const client = await pool.connect();
   try {
@@ -366,7 +364,10 @@ router.post('/kyc', async (req, res) => {
     });
 
     // Check if KYC record already exists for this user
-    const kycFindRes = await client.query('SELECT id, status, updated_at FROM kyc_records WHERE user_id = $1', [dbUserId]);
+    const kycFindRes = await client.query(
+      'SELECT id, status, updated_at FROM kyc_records WHERE user_id = $1 FOR UPDATE',
+      [dbUserId]
+    );
 
     let kycResult;
     let previousStatus = null;
@@ -390,9 +391,15 @@ router.post('/kyc', async (req, res) => {
       // Update existing KYC record
       kycResult = await client.query(
         `UPDATE kyc_records
-         SET aadhaar_front_name = $1, aadhaar_front_size = $2, aadhaar_front_data = $3,
-             aadhaar_back_name = $4, aadhaar_back_size = $5, aadhaar_back_data = $6,
-             pan_card_name = $7, pan_card_size = $8, pan_card_data = $9,
+         SET aadhaar_front_name = COALESCE($1, aadhaar_front_name),
+             aadhaar_front_size = COALESCE($2, aadhaar_front_size),
+             aadhaar_front_data = COALESCE($3, aadhaar_front_data),
+             aadhaar_back_name = COALESCE($4, aadhaar_back_name),
+             aadhaar_back_size = COALESCE($5, aadhaar_back_size),
+             aadhaar_back_data = COALESCE($6, aadhaar_back_data),
+             pan_card_name = COALESCE($7, pan_card_name),
+             pan_card_size = COALESCE($8, pan_card_size),
+             pan_card_data = COALESCE($9, pan_card_data),
              status = $10, rejection_reason = $11, reviewed_by = $12, reviewed_at = $13,
              submitted_at = COALESCE($14, submitted_at),
              updated_at = NOW()
@@ -410,6 +417,11 @@ router.post('/kyc', async (req, res) => {
         ]
       );
     } else {
+      if (!k.aadhaarFront || !k.aadhaarBack || !k.panCard) {
+        await client.query('ROLLBACK');
+        return fail(res, 400, 'aadhaarFront, aadhaarBack, and panCard are required for a new KYC record');
+      }
+
       // Insert new KYC record
       kycResult = await client.query(
         `INSERT INTO kyc_records
@@ -458,6 +470,15 @@ router.post('/kyc', async (req, res) => {
       try {
         whatsapp = await sendKycApprovedWhatsApp(userRes.rows[0]);
       } catch (notifyErr) {
+        console.error('[sync:kyc] WhatsApp notification failed after approval commit', {
+          kycId: kycResult.rows[0]?.id,
+          userId: dbUserId,
+          reason: notifyErr.message,
+          status: notifyErr.status || null,
+          to: notifyErr.to || null,
+          mode: notifyErr.mode || null,
+          response: notifyErr.response || null
+        });
         whatsapp = {
           sent: false,
           skipped: false,
@@ -482,9 +503,18 @@ router.post('/kyc', async (req, res) => {
     });
     return success(res, 'KYC synced successfully', { ...kycResult.rows[0], whatsapp });
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Sync KYC error:', err);
-    return fail(res, 500, 'Database error during KYC sync');
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[sync:kyc] failed', {
+      message: err.message,
+      code: err.code || null,
+      detail: err.detail || null,
+      stack: err.stack
+    });
+    return fail(res, 500, 'Database error during KYC sync', {
+      message: err.message,
+      code: err.code || null,
+      detail: err.detail || null
+    });
   } finally {
     client.release();
   }

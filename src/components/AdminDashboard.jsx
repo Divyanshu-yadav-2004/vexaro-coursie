@@ -108,6 +108,12 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       return `WhatsApp notification sent via ${whatsapp.mode || 'api'}${whatsapp.messageId ? ` (message ${whatsapp.messageId})` : ''}.`;
     }
     if (whatsapp.skipped) {
+      if (whatsapp.reason === 'whatsapp_not_configured') {
+        return 'WhatsApp setup is missing in backend/.env.';
+      }
+      if (whatsapp.reason === 'missing_mobile') {
+        return 'WhatsApp notification skipped because this user has no mobile number.';
+      }
       return `WhatsApp notification skipped: ${whatsapp.reason || 'not_applicable'}.`;
     }
     return `WhatsApp notification failed: ${whatsapp.reason || 'unknown_error'}.`;
@@ -133,6 +139,12 @@ export default function AdminDashboard({ currentUser, onLogout }) {
       setSelectedRecord(updatedRecord);
     } catch (err) {
       console.error('Approve failed:', err);
+      setAuditLogs(prev => [{
+        timestamp: new Date().toLocaleTimeString(),
+        actor: currentUser.email,
+        action: `KYC APPROVAL FAILED: ${err.message || 'Unknown error'}`,
+        level: 'CRITICAL'
+      }, ...prev]);
     }
   };
 
@@ -160,6 +172,12 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     setRejectionReason('');
     } catch (err) {
       console.error('Reject failed:', err);
+      setAuditLogs(prev => [{
+        timestamp: new Date().toLocaleTimeString(),
+        actor: currentUser.email,
+        action: `KYC REJECTION FAILED: ${err.message || 'Unknown error'}`,
+        level: 'CRITICAL'
+      }, ...prev]);
     }
   };
 

@@ -159,6 +159,7 @@ WHATSAPP_PHONE_NUMBER_ID=your_meta_phone_number_id
 WHATSAPP_ACCESS_TOKEN=your_meta_permanent_or_system_user_token
 WHATSAPP_API_VERSION=v20.0
 WHATSAPP_DEFAULT_COUNTRY_CODE=91
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=choose_a_strong_webhook_verify_token
 ```
 
 Recommended production template setup:
@@ -208,5 +209,18 @@ Failure checks:
 - `whatsapp_not_configured`: missing `WHATSAPP_PHONE_NUMBER_ID` or `WHATSAPP_ACCESS_TOKEN`.
 - `missing_mobile`: the user does not have a registered mobile number.
 - `sent: false` with `status`/`response`: Meta returned an API error; verify token permissions, phone number ID, recipient opt-in/test-number setup, and template approval.
+
+Admin/debug endpoints:
+
+- `GET /api/whatsapp/config` checks which required WhatsApp settings are present without exposing secrets.
+- `GET /api/whatsapp/status` verifies the configured phone number ID and access token against Meta Graph API.
+- `GET /api/whatsapp/webhook` is the Meta webhook verification callback.
+- `POST /api/whatsapp/webhook` logs WhatsApp delivery statuses and inbound message events.
+
+Webhook callback URL:
+
+```text
+https://your-backend-domain.com/api/whatsapp/webhook
+```
 
 Meta reference: [WhatsApp Cloud API send messages](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages).

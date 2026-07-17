@@ -212,6 +212,12 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
   const { id } = req.params;
   const { status, rejectionReason } = req.body;
 
+  console.info('[kyc:status] request received', {
+    kycId: id,
+    requestedStatus: status,
+    actorId: req.user?.id || null,
+  });
+
   if (!['approved', 'rejected'].includes(status)) {
     return res.status(400).json({ error: 'status must be "approved" or "rejected"' });
   }
@@ -231,6 +237,7 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
 
     if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
+      console.warn('[kyc:status] record not found', { kycId: id });
       return res.status(404).json({ error: 'KYC record not found' });
     }
 
@@ -252,6 +259,12 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
     );
 
     await client.query('COMMIT');
+    console.info('[kyc:status] database update committed', {
+      kycId: result.rows[0].id,
+      userId: result.rows[0].user_id,
+      previousStatus,
+      status,
+    });
 
     let whatsapp = { sent: false, skipped: true, reason: 'not_applicable' };
     const shouldNotify = status === 'approved' && previousStatus !== 'approved' && userResult.rows[0];
@@ -259,6 +272,15 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
       try {
         whatsapp = await sendKycApprovedWhatsApp(userResult.rows[0]);
       } catch (notifyErr) {
+        console.error('[kyc:status] WhatsApp notification failed after approval commit', {
+          kycId: result.rows[0].id,
+          userId: result.rows[0].user_id,
+          reason: notifyErr.message,
+          status: notifyErr.status || null,
+          to: notifyErr.to || null,
+          mode: notifyErr.mode || null,
+          response: notifyErr.response || null,
+        });
         whatsapp = {
           sent: false,
           skipped: false,
@@ -287,8 +309,22 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
     res.json({ message: `KYC ${status} successfully`, kyc: formatKYC(result.rows[0]), whatsapp });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('Update KYC status error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error('[kyc:status] failed before commit', {
+      kycId: id,
+      requestedStatus: status,
+      message: err.message,
+      code: err.code || null,
+      detail: err.detail || null,
+      stack: err.stack,
+    });
+    res.status(500).json({
+      error: 'KYC status update failed',
+      details: {
+        message: err.message,
+        code: err.code || null,
+        detail: err.detail || null,
+      },
+    });
   } finally {
     client.release();
   }

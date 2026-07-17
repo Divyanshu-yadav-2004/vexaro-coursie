@@ -38,7 +38,10 @@ async function apiFetch(endpoint, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed with status ${res.status}`);
+    const detailText = data.details
+      ? ` (${[data.details.message, data.details.code, data.details.detail].filter(Boolean).join(' | ')})`
+      : '';
+    throw new Error(`${data.error || `Request failed with status ${res.status}`}${detailText}`);
   }
 
   return data;

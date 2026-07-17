@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth');
 const kycRoutes  = require('./routes/kyc');
 const userRoutes = require('./routes/users');
 const syncRoutes  = require('./routes/sync');
+const whatsappRoutes = require('./routes/whatsapp');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -41,6 +42,7 @@ app.use('/api/auth',  authRoutes);
 app.use('/api/kyc',   kycRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/sync',  syncRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // ─── Health Check ────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {

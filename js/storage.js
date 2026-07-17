@@ -190,7 +190,10 @@ async function syncPost(endpoint, payload, options = {}) {
       userId: data && data.data && data.data.user_id
     });
     if (!res.ok || data.success === false) {
-      throw new Error(data.message || 'Sync failed');
+      const detailText = data.details
+        ? ` (${[data.details.message, data.details.code, data.details.detail].filter(Boolean).join(' | ')})`
+        : '';
+      throw new Error(`${data.message || 'Sync failed'}${detailText}`);
     }
     if (!isAdminPage()) processOfflineQueue();
     return data;

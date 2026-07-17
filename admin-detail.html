@@ -323,6 +323,12 @@
         return `WhatsApp notification sent${whatsapp.messageId ? ` (message ${whatsapp.messageId})` : ''}.`;
       }
       if (whatsapp.skipped) {
+        if (whatsapp.reason === 'whatsapp_not_configured') {
+          return 'WhatsApp setup is missing in backend/.env.';
+        }
+        if (whatsapp.reason === 'missing_mobile') {
+          return 'WhatsApp notification skipped because this user has no mobile number.';
+        }
         return `WhatsApp notification skipped: ${whatsapp.reason || 'not_applicable'}.`;
       }
       return `WhatsApp notification failed: ${whatsapp.reason || 'unknown_error'}.`;
@@ -688,7 +694,7 @@
         loadKYCRecord();
       } catch (err) {
         console.error(err);
-        showToast('❌ Failed to approve verification. Connection error.', 'error');
+        showToast(`❌ Failed to approve verification: ${err.message || 'Connection error'}`, 'error');
       }
     }
 
@@ -739,7 +745,7 @@
         loadKYCRecord();
       } catch (err) {
         console.error(err);
-        showToast('❌ Failed to reject verification. Connection error.', 'error');
+        showToast(`❌ Failed to reject verification: ${err.message || 'Connection error'}`, 'error');
       }
     }
 
@@ -781,7 +787,7 @@
         loadKYCRecord();
       } catch (err) {
         console.error(err);
-        showToast('❌ Failed to revert verification. Connection error.', 'error');
+        showToast(`❌ Failed to revert verification: ${err.message || 'Connection error'}`, 'error');
       }
     }
   </script>

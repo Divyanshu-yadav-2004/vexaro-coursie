@@ -79,6 +79,96 @@ function summarizeWhatsAppResponse(responseBody = {}) {
   };
 }
 
+function getWhatsAppConfigStatus() {
+  const hasAccessToken = Boolean(process.env.WHATSAPP_ACCESS_TOKEN);
+  const hasPhoneNumberId = Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID);
+  const hasWebhookVerifyToken = Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN);
+  const templateName = process.env.WHATSAPP_KYC_APPROVED_TEMPLATE_NAME || '';
+
+  return {
+    configured: hasAccessToken && hasPhoneNumberId,
+    hasAccessToken,
+    hasPhoneNumberId,
+    hasWebhookVerifyToken,
+    apiVersion: process.env.WHATSAPP_API_VERSION || 'v20.0',
+    defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '91',
+    messageMode: templateName ? 'template' : 'text',
+    templateName: templateName || null,
+    templateLanguage: process.env.WHATSAPP_KYC_APPROVED_TEMPLATE_LANGUAGE || 'en_US',
+    missing: [
+      !hasPhoneNumberId ? 'WHATSAPP_PHONE_NUMBER_ID' : null,
+      !hasAccessToken ? 'WHATSAPP_ACCESS_TOKEN' : null,
+    ].filter(Boolean),
+  };
+}
+
+function sanitizeGraphError(error = {}) {
+  return {
+    message: error.message || null,
+    type: error.type || null,
+    code: error.code || null,
+    errorSubcode: error.error_subcode || null,
+    fbtraceId: error.fbtrace_id || null,
+  };
+}
+
+async function verifyWhatsAppCredentials() {
+  const config = getWhatsAppConfigStatus();
+  if (!config.configured) {
+    return {
+      ok: false,
+      config,
+      reason: `Missing WhatsApp configuration: ${config.missing.join(', ')}`,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.WHATSAPP_VERIFY_TIMEOUT_MS) || 10000);
+
+  try {
+    const url = `https://graph.facebook.com/${config.apiVersion}/${process.env.WHATSAPP_PHONE_NUMBER_ID}?fields=id,display_phone_number,verified_name,quality_rating`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      },
+      signal: controller.signal,
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        config,
+        status: response.status,
+        error: sanitizeGraphError(body.error || { message: `Graph API returned ${response.status}` }),
+        response: body,
+      };
+    }
+
+    return {
+      ok: true,
+      config,
+      phoneNumber: {
+        id: body.id || null,
+        displayPhoneNumber: body.display_phone_number || null,
+        verifiedName: body.verified_name || null,
+        qualityRating: body.quality_rating || null,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      config,
+      error: {
+        message: err.name === 'AbortError' ? 'WhatsApp credential verification timed out' : err.message,
+        type: err.name,
+      },
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function sendWhatsAppPayload(toMobile, payloadBuilder) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -152,7 +242,10 @@ async function sendKycApprovedWhatsApp(user) {
 module.exports = {
   buildKycApprovedMessage,
   buildKycApprovedPayload,
+  getWhatsAppConfigStatus,
   maskWhatsAppNumber,
   normalizeWhatsAppNumber,
+  sanitizeGraphError,
   sendKycApprovedWhatsApp,
+  verifyWhatsAppCredentials,
 };
