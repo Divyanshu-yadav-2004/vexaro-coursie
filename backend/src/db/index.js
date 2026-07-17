@@ -10,7 +10,7 @@ const poolConfig = process.env.DATABASE_URL
       password: process.env.DB_PASSWORD || 'password',
     };
 
-const sslConfig = (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('neon.tech')) || process.env.NODE_ENV === 'production'
+const sslConfig = process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost')
   ? { rejectUnauthorized: false }
   : false;
 
