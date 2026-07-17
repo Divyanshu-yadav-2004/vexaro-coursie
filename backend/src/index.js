@@ -16,14 +16,31 @@ const BODY_LIMIT_MB = process.env.BODY_LIMIT_MB || 30;
 const BODY_LIMIT = `${BODY_LIMIT_MB}mb`;
 
 // ─── CORS ─────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
+  // Production
+  'https://vexaro.co.in',
+  'http://vexaro.co.in',
+  'https://www.vexaro.co.in',
+  'http://www.vexaro.co.in',
+  // Railway (frontend service, if served from Railway)
+  'https://vexaro-coursie-production.up.railway.app',
+  // Local development
+  'http://localhost:5173',  // Vite dev server
+  'http://localhost:3000',
+  'http://localhost:4173',  // Vite preview
+  'http://localhost:5500',  // VS Code Live Server
+  'http://127.0.0.1:5500',  // VS Code Live Server loopback
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:5173',  // Vite dev server
-    'http://localhost:3000',
-    'http://localhost:4173',  // Vite preview
-    'http://localhost:5500',  // VS Code Live Server
-    'http://127.0.0.1:5500',  // VS Code Live Server loopback
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    // Allow any *.railway.app subdomain (covers preview deployments)
+    if (/\.railway\.app$/.test(origin)) return callback(null, true);
+    callback(new Error(`CORS policy: origin '${origin}' is not allowed.`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

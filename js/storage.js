@@ -6,15 +6,21 @@ const USERS_KEY = 'kyc_users';
 const KYC_KEY = 'kyc_records';
 const ACTIVITY_KEY = 'kyc_activity';
 
-function getBackendApiBase() {
-  const configured = window.VEXARO_API_BASE || localStorage.getItem('vexaro_api_base');
-  if (configured) return configured.replace(/\/$/, '');
+// ─── PRODUCTION BACKEND URL ────────────────────────────────────
+// Railway backend service — update this if the Railway URL changes.
+const RAILWAY_BACKEND_URL = 'https://vexaro-coursie-production.up.railway.app/api';
 
+function getBackendApiBase() {
+  // 1. Runtime override (e.g. injected via <script> before storage.js)
+  const explicitConfig = window.VEXARO_API_BASE;
+  if (explicitConfig) return explicitConfig.replace(/\/$/, '');
+
+  // 2. Local dev — always hit the local Express server
   const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  // Always use localhost:5000/api for local development regardless of frontend port
   if (isLocalHost) return 'http://localhost:5000/api';
 
- return 'https://api.vexaro.co.in';
+  // 3. Production — use the Railway backend URL directly
+  return RAILWAY_BACKEND_URL;
 }
 
 const BACKEND_URL = `${getBackendApiBase()}/sync`;
@@ -699,7 +705,6 @@ function getKYCById(id) {
 }
 
 async function createKYC(kycData, options = {}) {
-  const { critical = true } = options;
   const records = getKYCRecords();
   const newKYC = {
     id: generateId(),
@@ -722,14 +727,21 @@ async function createKYC(kycData, options = {}) {
     throw new Error('KYC submission cannot be saved because the user email is missing.');
   }
 
-  await syncPost('/user', user, { critical });
-  const syncResult = await syncPost('/kyc', { ...newKYC, email: user.email }, { critical });
-  if (critical && (!syncResult || syncResult.success === false)) {
-    throw new Error('KYC submission was not confirmed by the database.');
-  }
-
+  // Always save to localStorage FIRST so the record is never lost,
+  // then attempt backend sync. A network failure here must NEVER block
+  // the user — syncPost already queues the payload for the next retry.
   records.push(newKYC);
   saveKYCRecords(records);
+
+  try {
+    await syncPost('/user', user, { critical: false });
+    await syncPost('/kyc', { ...newKYC, email: user.email }, { critical: false });
+  } catch (syncErr) {
+    // Backend unavailable — data is already in localStorage and the
+    // offline queue will retry automatically every 30 seconds.
+    console.warn('[createKYC] Backend sync skipped (offline queue active):', syncErr.message);
+  }
+
   return newKYC;
 }
 
