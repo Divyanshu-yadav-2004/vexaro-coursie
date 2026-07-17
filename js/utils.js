@@ -275,3 +275,13 @@ function removeKycDraft(key) {
   try { sessionStorage.removeItem(key); } catch (e) {}
   try { localStorage.removeItem(key); } catch (e) {}
 }
+
+/** Get clean URL for page navigation based on environment/hosting */
+function getCleanUrl(pageNameWithHtml) {
+  const hasHtml = window.location.pathname.endsWith('.html');
+  if (hasHtml) {
+    return pageNameWithHtml;
+  } else {
+    return pageNameWithHtml.replace(/\.html$/, '');
+  }
+}

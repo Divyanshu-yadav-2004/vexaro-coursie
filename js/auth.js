@@ -66,7 +66,7 @@ function isAdmin() {
 function requireAuth(redirectTo = 'index.html') {
   const session = getSession();
   if (!session) {
-    window.location.href = redirectTo;
+    window.location.href = getCleanUrl(redirectTo);
     return null;
   }
   
@@ -89,7 +89,7 @@ function requireAuth(redirectTo = 'index.html') {
 function requireAdmin(redirectTo = 'index.html') {
   const session = getSession();
   if (!session || session.role !== 'admin') {
-    window.location.href = redirectTo;
+    window.location.href = getCleanUrl(redirectTo);
     return null;
   }
   return session;
@@ -98,7 +98,7 @@ function requireAdmin(redirectTo = 'index.html') {
 /** Logout — clear session and redirect */
 function logout() {
   sessionStorage.removeItem(SESSION_KEY);
-  window.location.href = 'index.html';
+  window.location.href = getCleanUrl('index.html');
 }
 
 /** Check if session is expired */
@@ -145,7 +145,7 @@ setInterval(() => {
   if (isSessionExpired() && sessionStorage.getItem(SESSION_KEY)) {
     sessionStorage.removeItem(SESSION_KEY);
     if (!window.location.href.includes('index.html')) {
-      window.location.href = 'index.html';
+      window.location.href = getCleanUrl('index.html');
     }
   }
 }, 60000);

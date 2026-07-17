@@ -601,7 +601,7 @@
     }
 
     function viewKYCDetails(kycId) {
-      window.location.href = `admin-detail.html?id=${kycId}`;
+      window.location.href = getCleanUrl('admin-detail.html') + `?id=${kycId}`;
     }
 
     function toggleExportMenu() {

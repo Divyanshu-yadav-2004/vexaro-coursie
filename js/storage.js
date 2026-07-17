@@ -270,7 +270,8 @@ async function syncPost(endpoint, payload, options = {}) {
 // ─── INCREMENTAL SYNC & CONFLICT RESOLUTION ───────────────────
 
 function isAdminPage() {
-  return /(^|\/)admin-(dashboard|detail)\.html$/i.test(window.location.pathname);
+  // Match both /admin-detail.html (local) and /admin-detail (Railway strips .html in production)
+  return /(^|\/)admin-(dashboard|detail)(\.html)?$/i.test(window.location.pathname);
 }
 
 // Admin pages use PostgreSQL as the sole source of truth (in-memory cache only).

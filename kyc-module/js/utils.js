@@ -241,3 +241,13 @@ function createAvatarHTML(user, size = 'md') {
   const gradient = getGradientByInitials(user.name);
   return `<div class="avatar-placeholder avatar-${size}" style="background:${gradient}">${initials}</div>`;
 }
+
+/** Get clean URL for page navigation based on environment/hosting */
+function getCleanUrl(pageNameWithHtml) {
+  const hasHtml = window.location.pathname.endsWith('.html');
+  if (hasHtml) {
+    return pageNameWithHtml;
+  } else {
+    return pageNameWithHtml.replace(/\.html$/, '');
+  }
+}

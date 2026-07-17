@@ -240,8 +240,12 @@
 
     // Get URL Parameters
     const urlParams = new URLSearchParams(window.location.search);
-    const requestId = urlParams.get('id');
-    const userIdParam = urlParams.get('userId') || urlParams.get('user');
+    const _rawId = urlParams.get('id');
+    const _rawUserId = urlParams.get('userId') || urlParams.get('user');
+
+    const INVALID_PARAM = (v) => !v || v === 'undefined' || v === 'null' || v.trim() === '';
+    const requestId = INVALID_PARAM(_rawId) ? null : _rawId.trim();
+    const userIdParam = INVALID_PARAM(_rawUserId) ? null : _rawUserId.trim();
     
     let currentKYC = null;
     let targetUser = null;
@@ -249,7 +253,7 @@
     window.addEventListener('DOMContentLoaded', async () => {
       if (!requestId && !userIdParam) {
         showToast('❌ Invalid KYC details request.', 'error');
-        setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 1500);
+        setTimeout(() => { window.location.href = getCleanUrl('admin-dashboard.html'); }, 1500);
         return;
       }
 
@@ -354,7 +358,7 @@
 
       if (!targetUser) {
         showToast('❌ Customer associated with this record not found.', 'error');
-        setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 1500);
+        setTimeout(() => { window.location.href = getCleanUrl('admin-dashboard.html'); }, 1500);
         return;
       }
 
@@ -442,7 +446,7 @@
         box.innerHTML = `
           <h3 class="font-bold text-lg mb-2">KYC Documents Not Submitted</h3>
           <p class="text-sm mb-4">This customer profile is saved and all filled details are shown on this page. Approval actions will be available after the customer uploads Aadhaar and PAN documents.</p>
-          <button class="btn btn-outline btn-sm" onclick="window.location.href='admin-dashboard.html'">Back to Dashboard</button>
+          <button class="btn btn-outline btn-sm" onclick="window.location.href=getCleanUrl('admin-dashboard.html')">Back to Dashboard</button>
         `;
         return;
       }
