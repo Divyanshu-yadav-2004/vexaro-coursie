@@ -61,6 +61,11 @@ function formatKYC(row) {
       size: row.pan_card_size,
       path: row.pan_card_path,
     } : null,
+    passbookPhoto: row.passbook_photo_path ? {
+      name: row.passbook_photo_name,
+      size: row.passbook_photo_size,
+      path: row.passbook_photo_path,
+    } : null,
     status: row.status,
     rejectionReason: row.rejection_reason,
     submittedAt: row.submitted_at,
@@ -69,26 +74,28 @@ function formatKYC(row) {
 }
 
 // ─── POST /api/kyc/submit ─────────────────────────────────────
-// Accepts multipart: aadhaarFront, aadhaarBack, panCard files
+// Accepts multipart: aadhaarFront, aadhaarBack, panCard, passbookPhoto files
 router.post(
   '/submit',
   authMiddleware,
   upload.fields([
     { name: 'aadhaarFront', maxCount: 1 },
     { name: 'aadhaarBack', maxCount: 1 },
-    { name: 'panCard', maxCount: 1 }
+    { name: 'panCard', maxCount: 1 },
+    { name: 'passbookPhoto', maxCount: 1 }
   ]),
   async (req, res) => {
     const userId = req.user.id;
     const files = req.files || {};
 
-    if (!files.aadhaarFront || !files.aadhaarBack || !files.panCard) {
-      return res.status(400).json({ error: 'aadhaarFront, aadhaarBack, and panCard files are required' });
+    if (!files.aadhaarFront || !files.aadhaarBack || !files.panCard || !files.passbookPhoto) {
+      return res.status(400).json({ error: 'aadhaarFront, aadhaarBack, panCard, and passbookPhoto files are required' });
     }
 
     const aadhaarFront = files.aadhaarFront[0];
     const aadhaarBack = files.aadhaarBack[0];
     const panCard = files.panCard[0];
+    const passbookPhoto = files.passbookPhoto ? files.passbookPhoto[0] : null;
 
     const formatSize = (bytes) => {
       if (bytes < 1024) return bytes + ' B';
@@ -102,8 +109,10 @@ router.post(
         `INSERT INTO kyc_records
           (user_id, aadhaar_front_path, aadhaar_front_name, aadhaar_front_size,
            aadhaar_back_path, aadhaar_back_name, aadhaar_back_size,
-           pan_card_path, pan_card_name, pan_card_size, status, submitted_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending', NOW())
+           pan_card_path, pan_card_name, pan_card_size,
+           passbook_photo_path, passbook_photo_name, passbook_photo_size,
+           status, submitted_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending', NOW())
          ON CONFLICT (user_id) DO UPDATE SET
            aadhaar_front_path  = EXCLUDED.aadhaar_front_path,
            aadhaar_front_name  = EXCLUDED.aadhaar_front_name,
@@ -114,6 +123,9 @@ router.post(
            pan_card_path       = EXCLUDED.pan_card_path,
            pan_card_name       = EXCLUDED.pan_card_name,
            pan_card_size       = EXCLUDED.pan_card_size,
+           passbook_photo_path = COALESCE(EXCLUDED.passbook_photo_path, kyc_records.passbook_photo_path),
+           passbook_photo_name = COALESCE(EXCLUDED.passbook_photo_name, kyc_records.passbook_photo_name),
+           passbook_photo_size = COALESCE(EXCLUDED.passbook_photo_size, kyc_records.passbook_photo_size),
            status              = 'pending',
            rejection_reason    = NULL,
            submitted_at        = NOW()
@@ -122,7 +134,10 @@ router.post(
           userId,
           aadhaarFront.filename, aadhaarFront.originalname, formatSize(aadhaarFront.size),
           aadhaarBack.filename, aadhaarBack.originalname, formatSize(aadhaarBack.size),
-          panCard.filename, panCard.originalname, formatSize(panCard.size)
+          panCard.filename, panCard.originalname, formatSize(panCard.size),
+          passbookPhoto ? passbookPhoto.filename : null,
+          passbookPhoto ? passbookPhoto.originalname : null,
+          passbookPhoto ? formatSize(passbookPhoto.size) : null
         ]
       );
 

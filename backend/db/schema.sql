@@ -64,6 +64,9 @@ CREATE TABLE kyc_records (
   pan_card_path       VARCHAR(500),
   pan_card_name       VARCHAR(255),
   pan_card_size       VARCHAR(50),
+  passbook_photo_path VARCHAR(500),
+  passbook_photo_name VARCHAR(255),
+  passbook_photo_size VARCHAR(50),
   status              VARCHAR(20) NOT NULL DEFAULT 'pending'
                       CHECK (status IN ('pending', 'approved', 'rejected')),
   rejection_reason    TEXT,
@@ -75,6 +78,7 @@ CREATE TABLE kyc_records (
   aadhaar_front_data  TEXT,
   aadhaar_back_data   TEXT,
   pan_card_data       TEXT,
+  passbook_photo_data TEXT,
   
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),

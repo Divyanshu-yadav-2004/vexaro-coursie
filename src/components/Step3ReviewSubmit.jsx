@@ -24,7 +24,8 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
       const kyc = await submitKYC(
         documentData.aadhaarFront?.file,
         documentData.aadhaarBack?.file,
-        documentData.panCard?.file
+        documentData.panCard?.file,
+        documentData.passbookPhoto?.file || null
       );
       onSubmit(kyc);
     } catch (err) {
@@ -206,7 +207,29 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
                 <span className="text-[9px] text-slate-500">{documentData.panCard?.size}</span>
               </div>
             </div>
-          </div>
+
+            {/* Passbook Photo Chip */}
+            <div className={`flex items-center gap-3 p-3 rounded-xl border ${
+              documentData.passbookPhoto
+                ? 'bg-slate-900 border-slate-850'
+                : 'bg-slate-950/40 border-slate-800'
+            }`}>
+              <div className="text-xl">🏦</div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 block flex items-center gap-1">
+                  Passbook Photo
+                  <span className="text-[8px] text-slate-600 border border-slate-700 rounded-full px-1.5 py-0.5 uppercase">Optional</span>
+                </span>
+                {documentData.passbookPhoto ? (
+                  <>
+                    <span className="text-xs font-semibold text-slate-200 block truncate">{documentData.passbookPhoto?.name}</span>
+                    <span className="text-[9px] text-slate-500">{documentData.passbookPhoto?.size}</span>
+                  </>
+                ) : (
+                  <span className="text-[10px] text-slate-600 italic">Not uploaded</span>
+                )}
+              </div>
+            </div>
         </div>
 
         {/* Declaration and Action Bar */}

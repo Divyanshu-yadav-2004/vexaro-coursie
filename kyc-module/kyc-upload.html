@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/jpeg" href="assets/vexaro-logo.jpeg">
+  <link rel="shortcut icon" type="image/jpeg" href="assets/vexaro-logo.jpeg">
+  <link rel="apple-touch-icon" href="assets/vexaro-logo.jpeg">
   <title>Upload Documents | Vexaro KYC Portal</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -13,7 +16,7 @@
     <div class="navbar-brand">
       <img src="assets/vexaro-logo.jpeg" alt="Vexaro Courier Solution Private Limited" onclick="window.location.href='user-profile.html'" class="cursor-pointer">
     </div>
-    <div class="navbar-title hide-mobile" id="navbar-step-text">Step 1 of 3: Aadhaar Front</div>
+    <div class="navbar-title hide-mobile" id="navbar-step-text">Step 1 of 4: Aadhaar Front</div>
     <div class="navbar-actions">
       <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌓</button>
       <button class="btn btn-outline btn-sm" onclick="exitToProfile()">❌ Cancel</button>
@@ -34,6 +37,10 @@
       <div class="step" id="step-ind-3">
         <div class="step-num"><span>3</span></div>
         <div class="step-label">PAN Card</div>
+      </div>
+      <div class="step" id="step-ind-4">
+        <div class="step-num"><span>4</span></div>
+        <div class="step-label">Passbook</div>
       </div>
     </div>
 
@@ -108,11 +115,12 @@
     const draftKey = 'kyc_draft_' + session.userId;
     let isProcessingFile = false;
     
-    // Draft schema: { aadhaarFront: { data, name, size, type, uploadedAt }, aadhaarBack: {...}, panCard: {...} }
+    // Draft schema: { aadhaarFront: { data, name, size, type, uploadedAt }, aadhaarBack: {...}, panCard: {...}, passbook: {...} }
     let kycDraft = JSON.parse(localStorage.getItem(draftKey)) || {
       aadhaarFront: null,
       aadhaarBack: null,
-      panCard: null
+      panCard: null,
+      passbook: null
     };
 
     const STEP_CONFIG = {
@@ -133,6 +141,12 @@
         key: 'panCard',
         label: 'PAN Card Image',
         icon: '💳'
+      },
+      4: {
+        title: '🏦 Bank Passbook / Cheque',
+        key: 'passbook',
+        label: 'Bank Passbook / Cheque',
+        icon: '🏦'
       }
     };
 
@@ -148,11 +162,12 @@
       
       // Update titles
       document.getElementById('upload-card-title').textContent = config.title;
-      document.getElementById('navbar-step-text').textContent = `Step ${currentStep} of 3: ${config.label}`;
-      document.getElementById('upload-icon-graphic').textContent = config.icon === '📋' ? '📄' : '💳';
+      document.getElementById('navbar-step-text').textContent = `Step ${currentStep} of 4: ${config.label}`;
+      const _iconMap = { '📋': '📄', '💳': '💳', '🏦': '🏦' };
+      document.getElementById('upload-icon-graphic').textContent = _iconMap[config.icon] || '📤';
 
       // Stepper UI Indicators updates
-      for (let i = 1; i <= 3; i++) {
+      for (let i = 1; i <= 4; i++) {
         const stepIndicator = document.getElementById(`step-ind-${i}`);
         stepIndicator.classList.remove('active', 'completed');
         if (i < currentStep) {
@@ -167,7 +182,7 @@
       
       // Next/Submit Button State text
       const nextBtn = document.getElementById('btn-next');
-      if (currentStep === 3) {
+      if (currentStep === 4) {
         nextBtn.textContent = 'Review Details →';
       } else {
         nextBtn.textContent = 'Next →';
@@ -208,8 +223,9 @@
 
         // ── KEY FIX: Clone the drop-zone to strip ALL old event listeners ──
         const freshZone = dropZone.cloneNode(false); // shallow clone preserves attrs, kills listeners
+        const _zoneIconMap = { '📋': '📄', '💳': '💳', '🏦': '🏦' };
         freshZone.innerHTML = `
-          <div class="upload-icon" id="upload-icon-graphic">${config.icon === '📋' ? '📄' : '💳'}</div>
+          <div class="upload-icon" id="upload-icon-graphic">${_zoneIconMap[config.icon] || '📤'}</div>
           <div class="upload-text-primary" id="drop-text-main">Drag &amp; Drop file here</div>
           <div class="upload-text-secondary">or click to browse local files</div>
           <div class="upload-formats">JPG, JPEG, PNG, PDF (Max 5MB)</div>
@@ -249,7 +265,7 @@
             renderFilePreview(previewCont, file, objectUrl, isPDF, () => removeCurrentFile());
             document.getElementById('status-tag').className  = 'badge badge-approved';
             document.getElementById('status-tag').textContent = 'Uploaded ✔';
-            document.getElementById('navbar-step-text').textContent = `Step ${currentStep} of 3: ${config.label} ✔`;
+            document.getElementById('navbar-step-text').textContent = `Step ${currentStep} of 4: ${config.label} ✔`;
 
             showToast(`✅ ${config.label} uploaded!`, 'success');
             logActivity(session.userId, session.name, `Uploaded ${config.label}: ${file.name}`, {}, '📤');
@@ -313,7 +329,7 @@
           return;
         }
 
-        if (currentStep === 3) {
+        if (currentStep === 4) {
           // Go to Review
           window.location.href = 'kyc-review.html';
           return;

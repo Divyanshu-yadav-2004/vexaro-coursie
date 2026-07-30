@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Review & Submit KYC | Vexaro KYC Portal</title>
+  <link rel="icon" type="image/jpeg" href="assets/vexaro-logo.jpeg">
+  <link rel="shortcut icon" type="image/jpeg" href="assets/vexaro-logo.jpeg">
+  <link rel="apple-touch-icon" href="assets/vexaro-logo.jpeg">
+  <title>Review &amp; Submit KYC | Vexaro KYC Portal</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -21,7 +24,7 @@
   </header>
 
   <main class="container page-wrapper">
-    <h1 class="font-bold text-lg mb-2">🔎 Review & Submit KYC</h1>
+    <h1 class="font-bold text-lg mb-2">🔎 Review &amp; Submit KYC</h1>
     <p class="text-sm text-muted mb-6">Please carefully verify your details and uploaded document images before final submission.</p>
 
     <!-- Two-column Review layout -->
@@ -81,7 +84,7 @@
       <!-- Right Column: Verification consent & Actions -->
       <div class="card flex-col">
         <div class="card-header">
-          <h2 class="card-title">📄 Declaration & Submit</h2>
+          <h2 class="card-title">📄 Declaration &amp; Submit</h2>
         </div>
         <div class="card-body flex-col gap-4">
           <div class="alert alert-warning">
@@ -186,7 +189,7 @@
         if (key && key.startsWith('kyc_draft_')) {
           try {
             const draft = JSON.parse(localStorage.getItem(key)) || JSON.parse(sessionStorage.getItem(key));
-            if (draft && (draft.aadhaarFront || draft.aadhaarBack || draft.panCard)) {
+            if (draft && (draft.aadhaarFront || draft.aadhaarBack || draft.panCard || draft.passbook)) {
               kycDraft = draft;
               saveKycDraft(draftKey, kycDraft);
               break;
@@ -198,7 +201,7 @@
 
     window.addEventListener('DOMContentLoaded', () => {
       // Guard: If draft is missing or documents are not uploaded, redirect to upload page
-      if (!kycDraft || !kycDraft.aadhaarFront || !kycDraft.aadhaarBack || !kycDraft.panCard) {
+      if (!kycDraft || !kycDraft.aadhaarFront || !kycDraft.aadhaarBack || !kycDraft.panCard || !kycDraft.passbook) {
         showToast('⚠️ Please upload all required documents first.', 'warning');
         setTimeout(() => { window.location.href = 'kyc-upload.html'; }, 2000);
         return;
@@ -234,7 +237,8 @@
       const DOCS = [
         { label: 'Aadhaar Card (Front)', key: 'aadhaarFront', icon: '📄' },
         { label: 'Aadhaar Card (Back)', key: 'aadhaarBack', icon: '📄' },
-        { label: 'PAN Card', key: 'panCard', icon: '💳' }
+        { label: 'PAN Card', key: 'panCard', icon: '💳' },
+        { label: 'Bank Passbook / Cheque', key: 'passbook', icon: '🏦' }
       ];
 
       DOCS.forEach(doc => {
@@ -334,6 +338,7 @@
             aadhaarFront: kycDraft.aadhaarFront,
             aadhaarBack: kycDraft.aadhaarBack,
             panCard: kycDraft.panCard,
+            passbook: kycDraft.passbook,
             timeline: [
               { step: 'Profile Completed', completedAt: currentUser.createdAt, status: 'completed' },
               { step: 'Documents Uploaded', completedAt: Date.now() - 30000, status: 'completed' },

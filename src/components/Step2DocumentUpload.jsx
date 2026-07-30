@@ -5,19 +5,22 @@ export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
   const [docs, setDocs] = useState({
     aadhaarFront: initialData.aadhaarFront || null,
     aadhaarBack: initialData.aadhaarBack || null,
-    panCard: initialData.panCard || null
+    panCard: initialData.panCard || null,
+    passbookPhoto: initialData.passbookPhoto || null
   });
 
   const [uploadStatus, setUploadStatus] = useState({
     aadhaarFront: docs.aadhaarFront ? 'attached' : 'empty', // 'empty' | 'uploading' | 'attached'
     aadhaarBack: docs.aadhaarBack ? 'attached' : 'empty',
-    panCard: docs.panCard ? 'attached' : 'empty'
+    panCard: docs.panCard ? 'attached' : 'empty',
+    passbookPhoto: docs.passbookPhoto ? 'attached' : 'empty'
   });
 
   const [progress, setProgress] = useState({
     aadhaarFront: 0,
     aadhaarBack: 0,
-    panCard: 0
+    panCard: 0,
+    passbookPhoto: 0
   });
 
   const handleFileChange = (key, file) => {
@@ -205,6 +208,19 @@ export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
             <span className="text-[10px] text-slate-500">Must be a single page card upload</span>
           </div>
           {renderDropzone('panCard', 'PAN Card')}
+        </div>
+
+        {/* Passbook Photo Section */}
+        <div>
+          <div className="flex items-center justify-between mb-3.5">
+            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wide flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-brand-orange" />
+              Passbook Photo
+              <span className="ml-1 text-[9px] font-semibold text-slate-500 border border-slate-700 rounded-full px-2 py-0.5 uppercase tracking-wider">Optional</span>
+            </h3>
+            <span className="text-[10px] text-slate-500">Supports PDF, PNG, or JPG (Max 5MB)</span>
+          </div>
+          {renderDropzone('passbookPhoto', 'Passbook Front Page')}
         </div>
 
         {/* Action Panel */}

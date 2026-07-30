@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, User, Key, Info, Eye, EyeOff } from 'lucide-react';
+import { Shield, User, Info, Eye, EyeOff } from 'lucide-react';
 import { login, demoLogin, getDemoUsers } from '../utils/api';
 
 const LOGO_URL = '/assets/vexaro-logo.jpeg';
@@ -303,17 +303,6 @@ export default function Login({ onLoginSuccess }) {
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-              </div>
-            </div>
-
-            <div className="bg-slate-900/60 border border-slate-850 p-2.5 rounded-xl flex items-start gap-2.5 text-[10px] text-slate-400 leading-relaxed">
-              <Key className="w-4 h-4 text-brand-orange shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold text-slate-300">Default Password: </span>
-                <code className="text-brand-orange font-mono select-all bg-slate-950 px-1 rounded">
-                  {adminRole === 'admin' ? 'admin@kyc123' : 'owner@kyc123'}
-                </code>
-                <span className="block text-slate-600 mt-0.5">Change this in your .env after first login</span>
               </div>
             </div>
 

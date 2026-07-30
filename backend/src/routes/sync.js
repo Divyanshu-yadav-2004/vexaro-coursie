@@ -32,7 +32,8 @@ function summarizeKycPayload(k = {}) {
     documents: {
       aadhaarFront: Boolean(k.aadhaarFront),
       aadhaarBack: Boolean(k.aadhaarBack),
-      panCard: Boolean(k.panCard)
+      panCard: Boolean(k.panCard),
+      passbookPhoto: Boolean(k.passbookPhoto)
     }
   };
 }
@@ -179,6 +180,12 @@ router.get('/', async (req, res) => {
         data: k.pan_card_data,
         name: k.pan_card_name,
         size: k.pan_card_size,
+        type: 'image/png'
+      } : null,
+      passbookPhoto: k.passbook_photo_name ? {
+        data: k.passbook_photo_data,
+        name: k.passbook_photo_name,
+        size: k.passbook_photo_size,
         type: 'image/png'
       } : null,
       timeline: [
@@ -400,15 +407,19 @@ router.post('/kyc', async (req, res) => {
              pan_card_name = COALESCE($7, pan_card_name),
              pan_card_size = COALESCE($8, pan_card_size),
              pan_card_data = COALESCE($9, pan_card_data),
-             status = $10, rejection_reason = $11, reviewed_by = $12, reviewed_at = $13,
-             submitted_at = COALESCE($14, submitted_at),
+             passbook_photo_name = COALESCE($10, passbook_photo_name),
+             passbook_photo_size = COALESCE($11, passbook_photo_size),
+             passbook_photo_data = COALESCE($12, passbook_photo_data),
+             status = $13, rejection_reason = $14, reviewed_by = $15, reviewed_at = $16,
+             submitted_at = COALESCE($17, submitted_at),
              updated_at = NOW()
-         WHERE user_id = $15
+         WHERE user_id = $18
          RETURNING *`,
         [
           k.aadhaarFront?.name || null, k.aadhaarFront?.size || null, k.aadhaarFront?.data || null,
           k.aadhaarBack?.name || null, k.aadhaarBack?.size || null, k.aadhaarBack?.data || null,
           k.panCard?.name || null, k.panCard?.size || null, k.panCard?.data || null,
+          k.passbookPhoto?.name || null, k.passbookPhoto?.size || null, k.passbookPhoto?.data || null,
           k.status || 'pending', k.rejectionReason || null,
           k.reviewedBy ? 1 : null, // admin ID placeholder
           k.reviewedAt ? new Date(k.reviewedAt) : null,
@@ -428,14 +439,16 @@ router.post('/kyc', async (req, res) => {
           (user_id, aadhaar_front_name, aadhaar_front_size, aadhaar_front_data,
            aadhaar_back_name, aadhaar_back_size, aadhaar_back_data,
            pan_card_name, pan_card_size, pan_card_data,
+           passbook_photo_name, passbook_photo_size, passbook_photo_data,
            status, rejection_reason, submitted_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, NOW()))
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, NOW()))
          RETURNING *`,
         [
           dbUserId,
           k.aadhaarFront?.name || null, k.aadhaarFront?.size || null, k.aadhaarFront?.data || null,
           k.aadhaarBack?.name || null, k.aadhaarBack?.size || null, k.aadhaarBack?.data || null,
           k.panCard?.name || null, k.panCard?.size || null, k.panCard?.data || null,
+          k.passbookPhoto?.name || null, k.passbookPhoto?.size || null, k.passbookPhoto?.data || null,
           k.status || 'pending', k.rejectionReason || null,
           k.submittedAt ? new Date(k.submittedAt) : null
         ]

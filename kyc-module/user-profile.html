@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/jpeg" href="assets/vexaro-logo.jpeg">
+  <link rel="shortcut icon" type="image/jpeg" href="assets/vexaro-logo.jpeg">
+  <link rel="apple-touch-icon" href="assets/vexaro-logo.jpeg">
   <title>My Profile | Vexaro KYC Portal</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -262,6 +265,10 @@
     let currentUser = null;
     let currentKYC  = null;
 
+    function goToKycUpload() {
+      window.location.href = getCleanUrl('kyc-upload.html');
+    }
+
     // Load data with simulated skeleton state
     window.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
@@ -275,6 +282,9 @@
     function loadUserData() {
       currentUser = getUserById(session.userId);
       if (!currentUser) { logout(); return; }
+      if (!['not_started', 'pending', 'approved', 'rejected'].includes(currentUser.kycStatus)) {
+        currentUser.kycStatus = 'not_started';
+      }
       currentKYC = getKYCByUserId(currentUser.id);
 
       // Header banner
@@ -363,7 +373,7 @@
             <div class="flex-col gap-2">
               <h3 class="font-bold text-lg">Start KYC Verification</h3>
               <p class="text-sm">Please upload your Aadhaar Card and PAN Card to unlock dispatch services.</p>
-              <button class="btn btn-primary mt-2" onclick="window.location.href='kyc-upload.html'">
+              <button class="btn btn-primary mt-2" onclick="goToKycUpload()">
                 🚀 Start Verification Process
               </button>
             </div>
@@ -410,7 +420,7 @@
               <div class="text-xs text-muted mt-2">
                 Rejected On: ${formatDateTime(currentKYC ? currentKYC.reviewedAt : null)}
               </div>
-              <button class="btn btn-danger mt-4" onclick="window.location.href='kyc-upload.html'">
+              <button class="btn btn-danger mt-4" onclick="goToKycUpload()">
                 🔄 Re-upload Documents
               </button>
             </div>
@@ -525,4 +535,3 @@
   </script>
 </body>
 </html>
-

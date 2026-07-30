@@ -608,6 +608,33 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                         🛡️ Auto-Redacted Secure
                       </div>
                     </div>
+
+                    {/* Passbook Photo */}
+                    {selectedRecord.passbookPhoto ? (
+                      <div className="bg-slate-900 border border-slate-850 rounded-xl p-3 flex flex-col justify-between h-[160px]">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-5 h-5 text-brand-orange" />
+                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Passbook Photo</span>
+                        </div>
+                        
+                        <div className="my-3 text-center">
+                          <span className="text-xs font-bold text-slate-200 block truncate max-w-full">
+                            {selectedRecord.passbookPhoto?.name}
+                          </span>
+                          <span className="text-[9px] text-slate-500">{selectedRecord.passbookPhoto?.size}</span>
+                        </div>
+
+                        <div className="bg-green-950/30 text-green-400 text-[8px] font-bold px-2 py-0.5 rounded-full border border-green-800/40 text-center uppercase tracking-wide">
+                          🛡️ Auto-Redacted Secure
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-950/40 border border-slate-800 border-dashed rounded-xl p-3 flex flex-col justify-center items-center h-[160px] gap-2">
+                        <FileText className="w-5 h-5 text-slate-700" />
+                        <span className="text-[10px] font-bold text-slate-600 uppercase text-center">Passbook Photo</span>
+                        <span className="text-[9px] text-slate-700 italic">Not Uploaded</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center text-xs text-slate-500 py-6 font-semibold">

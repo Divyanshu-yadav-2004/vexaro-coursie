@@ -4,8 +4,21 @@
 
 const SESSION_KEY = 'kyc_session';
 const SESSION_DURATION = 2 * 60 * 60 * 1000; // 2 hours
-const ADMIN_PASSWORD = 'admin@kyc123';
+const ADMIN_PASSWORD_SHA256 = '73289c064cb89f3c28b7997292b7628124a32ab1c28361aec9debc95250c9dd3';
 const ADMIN_EMAIL = 'admin@kycportal.com';
+
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(value);
+  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function isAdminPasswordValid(password) {
+  if (!password || !globalThis.crypto?.subtle) return false;
+  return (await sha256Hex(password)) === ADMIN_PASSWORD_SHA256;
+}
 
 /** Create a user session in sessionStorage */
 function createUserSession(user) {

@@ -41,7 +41,8 @@ function summarizeSyncPayload(endpoint, payload = {}) {
       documents: {
         aadhaarFront: Boolean(payload.aadhaarFront),
         aadhaarBack: Boolean(payload.aadhaarBack),
-        panCard: Boolean(payload.panCard)
+        panCard: Boolean(payload.panCard),
+        passbookPhoto: Boolean(payload.passbookPhoto)
       }
     };
   }
@@ -118,23 +119,8 @@ function showSyncOverlay(show) {
 }
 
 function showOfflineBanner(show) {
-  let banner = document.getElementById('offline-sync-banner');
-  if (show) {
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.id = 'offline-sync-banner';
-      banner.style.cssText = 'position:fixed;bottom:10px;left:10px;background:#1d3557;color:#ffffff;padding:7px 10px;border-radius:8px;font-size:10px;font-weight:bold;z-index:80;box-shadow:0 6px 14px rgba(15,23,42,0.16);font-family:sans-serif;line-height:1.35;animation:slideUp 0.3s ease;pointer-events:none;opacity:0.92;';
-      banner.innerHTML = '<strong>Local data mode</strong><br><span style="font-weight:normal;opacity:0.85;font-size:9px;">Sync will retry automatically.</span>';
-      
-      const style = document.createElement('style');
-      style.innerHTML = '@keyframes slideUp { from { transform: translateY(20px); opacity:0; } to { transform: translateY(0); opacity:1; } }';
-      document.head.appendChild(style);
-
-      document.body.appendChild(banner);
-    }
-  } else {
-    if (banner) banner.remove();
-  }
+  const banner = document.getElementById('offline-sync-banner');
+  if (banner) banner.remove();
 }
 
 // ─── OFFLINE SYNC QUEUE ────────────────────────────────────────
@@ -713,6 +699,7 @@ async function createKYC(kycData, options = {}) {
     aadhaarFront: kycData.aadhaarFront || null,
     aadhaarBack: kycData.aadhaarBack || null,
     panCard: kycData.panCard || null,
+    passbookPhoto: kycData.passbook || kycData.passbookPhoto || null,
     status: 'pending',
     submittedAt: Date.now(),
     reviewedAt: null,
@@ -750,7 +737,7 @@ async function updateKYC(id, data) {
   const records = getKYCRecords();
   const idx = records.findIndex(k => idsMatch(k.id, id));
   if (idx === -1) return null;
-  
+
   records[idx] = { ...records[idx], ...data, updatedAt: Date.now() };
   saveKYCRecords(records);
 
@@ -774,7 +761,8 @@ async function deleteKYC(id) {
 
 function getKYCStats() {
   const records = getKYCRecords();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
   return {
     total: records.length,
@@ -810,16 +798,16 @@ function saveActivityLogsLegacy(newLog) {
         if (existingLogs) {
             logs = JSON.parse(existingLogs);
         }
-        
+
         // 2. Add the newest log to the very top of the list
-        logs.unshift(newLog); 
-        
+        logs.unshift(newLog);
+
         // 3. 🚨 THE CAP: Slice the array to keep only the 15 most recent logs
         // This stops the data from bloating and exceeding the 5MB quota
         if (logs.length > 15) {
             logs = logs.slice(0, 15);
         }
-        
+
         // 4. Save the safely capped array back to localStorage
         localStorage.setItem('kyc_activity', JSON.stringify(logs));
     } catch (err) {
@@ -888,10 +876,10 @@ function seedDemoData() {
   const makeDoc = (name, size) => ({ data: placeholderDoc, name, size, type: 'image/png', uploadedAt: now - Math.floor(Math.random() * 5 * day) });
 
   const kycRecords = [
-    { id: 'k1', userId: 'u1', aadhaarFront: makeDoc('aadhaar_front.png', 420000), aadhaarBack: makeDoc('aadhaar_back.png', 390000), panCard: makeDoc('pan_card.png', 310000), status: 'pending', submittedAt: now - 9 * day, reviewedAt: null, reviewedBy: null, rejectionReason: null, approvedOn: null, timeline: [] },
-    { id: 'k2', userId: 'u2', aadhaarFront: makeDoc('aadhaar_front.png', 510000), aadhaarBack: makeDoc('aadhaar_back.png', 480000), panCard: makeDoc('pan_card.png', 340000), status: 'approved', submittedAt: now - 7 * day, reviewedAt: now - 5*day, reviewedBy: 'Admin', rejectionReason: null, approvedOn: now - 5*day, timeline: [] },
-    { id: 'k3', userId: 'u3', aadhaarFront: makeDoc('aadhaar_front.png', 450000), aadhaarBack: makeDoc('aadhaar_back.png', 410000), panCard: makeDoc('pan_card.png', 290000), status: 'rejected', submittedAt: now - 4 * day, reviewedAt: now - 2*day, reviewedBy: 'Admin', rejectionReason: 'PAN card image is blurry and unreadable. Please upload a clear, high-resolution image.', approvedOn: null, timeline: [] },
-    { id: 'k4', userId: 'u4', aadhaarFront: makeDoc('aadhaar_front.png', 380000), aadhaarBack: makeDoc('aadhaar_back.png', 350000), panCard: makeDoc('pan_card.png', 280000), status: 'pending', submittedAt: now - 2 * day, reviewedAt: null, reviewedBy: null, rejectionReason: null, approvedOn: null, timeline: [] },
+    { id: 'k1', userId: 'u1', aadhaarFront: makeDoc('aadhaar_front.png', 420000), aadhaarBack: makeDoc('aadhaar_back.png', 390000), panCard: makeDoc('pan_card.png', 310000), passbookPhoto: null, status: 'pending', submittedAt: now - 9 * day, reviewedAt: null, reviewedBy: null, rejectionReason: null, approvedOn: null, timeline: [] },
+    { id: 'k2', userId: 'u2', aadhaarFront: makeDoc('aadhaar_front.png', 510000), aadhaarBack: makeDoc('aadhaar_back.png', 480000), panCard: makeDoc('pan_card.png', 340000), passbookPhoto: null, status: 'approved', submittedAt: now - 7 * day, reviewedAt: now - 5 * day, reviewedBy: 'Admin', rejectionReason: null, approvedOn: now - 5 * day, timeline: [] },
+    { id: 'k3', userId: 'u3', aadhaarFront: makeDoc('aadhaar_front.png', 450000), aadhaarBack: makeDoc('aadhaar_back.png', 410000), panCard: makeDoc('pan_card.png', 290000), passbookPhoto: null, status: 'rejected', submittedAt: now - 4 * day, reviewedAt: now - 2 * day, reviewedBy: 'Admin', rejectionReason: 'PAN card image is blurry and unreadable. Please upload a clear, high-resolution image.', approvedOn: null, timeline: [] },
+    { id: 'k4', userId: 'u4', aadhaarFront: makeDoc('aadhaar_front.png', 380000), aadhaarBack: makeDoc('aadhaar_back.png', 350000), panCard: makeDoc('pan_card.png', 280000), passbookPhoto: null, status: 'pending', submittedAt: now - 2 * day, reviewedAt: null, reviewedBy: null, rejectionReason: null, approvedOn: null, timeline: [] },
   ];
 
   saveUsers(users);

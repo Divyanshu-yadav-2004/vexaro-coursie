@@ -100,11 +100,14 @@ export function logout() {
  * @param {File} aadhaarBack
  * @param {File} panCard
  */
-export async function submitKYC(aadhaarFront, aadhaarBack, panCard) {
+export async function submitKYC(aadhaarFront, aadhaarBack, panCard, passbookPhoto = null) {
   const formData = new FormData();
   formData.append('aadhaarFront', aadhaarFront);
   formData.append('aadhaarBack', aadhaarBack);
   formData.append('panCard', panCard);
+  if (passbookPhoto) {
+    formData.append('passbookPhoto', passbookPhoto);
+  }
 
   const data = await apiFetch('/kyc/submit', {
     method: 'POST',
