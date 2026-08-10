@@ -1,7 +1,22 @@
+require('dotenv').config();
 const { Pool } = require('pg');
 
-const poolConfig = process.env.DATABASE_URL
-  ? { connectionString: process.env.DATABASE_URL }
+function getCleanConnectionString(urlStr) {
+  if (!urlStr) return null;
+  try {
+    const parsed = new URL(urlStr);
+    parsed.searchParams.delete('channel_binding');
+    return parsed.toString();
+  } catch {
+    return urlStr;
+  }
+}
+
+const rawDbUrl = process.env.DATABASE_URL;
+const cleanedDbUrl = getCleanConnectionString(rawDbUrl);
+
+const poolConfig = cleanedDbUrl
+  ? { connectionString: cleanedDbUrl }
   : {
       host: process.env.DB_HOST || 'localhost',
       port: process.env.DB_PORT || 5432,
@@ -10,7 +25,7 @@ const poolConfig = process.env.DATABASE_URL
       password: process.env.DB_PASSWORD || 'password',
     };
 
-const sslConfig = process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost')
+const sslConfig = (cleanedDbUrl && !cleanedDbUrl.includes('localhost')) || process.env.NODE_ENV === 'production'
   ? { rejectUnauthorized: false }
   : false;
 
@@ -25,7 +40,7 @@ pool.connect((err, client, release) => {
     console.error('❌ Database connection failed:', err.message);
     console.error('   Check your DATABASE_URL in backend/.env');
   } else {
-    console.log('✅ PostgreSQL connected successfully');
+    console.log('✅ Authoritative PostgreSQL database connected successfully');
     release();
   }
 });

@@ -340,7 +340,7 @@
         animateCharts();
         if (!adminRefreshTimer) {
           adminRefreshTimer = setInterval(() => {
-            refreshAdminDataFromDatabase({ silent: true }).catch(err => {
+            refreshAdminDataFromDatabase({ silent: true, isBackground: true }).catch(err => {
               console.warn('Admin background refresh failed:', err.message);
             });
           }, 30000);

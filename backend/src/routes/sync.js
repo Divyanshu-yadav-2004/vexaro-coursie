@@ -98,10 +98,13 @@ router.get('/', async (req, res) => {
     let params = [];
 
     if (sinceMs > 0) {
-      // Convert millisecond timestamp to TIMESTAMPTZ for users & kyc_records
-      usersQuery = 'SELECT * FROM users WHERE updated_at > to_timestamp($1 / 1000.0) ORDER BY id ASC';
-      kycQuery = 'SELECT * FROM kyc_records WHERE updated_at > to_timestamp($1 / 1000.0) ORDER BY id ASC';
-      activityQuery = 'SELECT * FROM activity_logs WHERE timestamp > $1 ORDER BY timestamp DESC';
+      // Incremental sync: check dataset-specific timestamp columns to ensure no records are missed.
+      // - users table uses updated_at and created_at (TIMESTAMPTZ)
+      // - kyc_records table uses updated_at, submitted_at, and created_at (TIMESTAMPTZ)
+      // - activity_logs table uses numeric timestamp (BIGINT ms) and created_at (TIMESTAMPTZ)
+      usersQuery = 'SELECT * FROM users WHERE updated_at > to_timestamp($1 / 1000.0) OR created_at > to_timestamp($1 / 1000.0) ORDER BY id ASC';
+      kycQuery = 'SELECT * FROM kyc_records WHERE updated_at > to_timestamp($1 / 1000.0) OR submitted_at > to_timestamp($1 / 1000.0) OR created_at > to_timestamp($1 / 1000.0) ORDER BY id ASC';
+      activityQuery = 'SELECT * FROM activity_logs WHERE timestamp > $1 OR created_at > to_timestamp($1 / 1000.0) ORDER BY timestamp DESC';
       params = [sinceMs];
     }
 

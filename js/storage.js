@@ -419,7 +419,7 @@ async function initStorageFromBackend(options = {}) {
 
     showOfflineBanner(false);
 
-    if (replaceCache) {
+    if (replaceCache && lastSync === 0) {
       if (!validateSyncPayload(data)) {
         throw new Error('Invalid database response — existing records were kept');
       }
@@ -450,14 +450,14 @@ async function initStorageFromBackend(options = {}) {
         saveUsers(users);
         saveKYCRecords(records);
         saveActivityLogs(activities);
-        localStorage.setItem('kyc_last_sync', String(Date.now()));
       }
+      localStorage.setItem('kyc_last_sync', String(Date.now()));
       if (!isAdminPage()) processOfflineQueue();
       window.dispatchEvent(new CustomEvent('vexaro-admin-data-refreshed'));
       return { users, records, activities };
     }
 
-    // 1. Conflict Resolution for Users
+    // 1. Conflict Resolution / Incremental Sync for Users
     if (data.users && data.users.length > 0) {
       let localUsers = getUsers();
       data.users.forEach(dbU => {
@@ -474,7 +474,7 @@ async function initStorageFromBackend(options = {}) {
       saveUsers(localUsers);
     }
 
-    // 2. Conflict Resolution for KYC Records
+    // 2. Conflict Resolution / Incremental Sync for KYC Records
     if (data.records && data.records.length > 0) {
       let localRecords = getKYCRecords();
       data.records.forEach(dbK => {
@@ -504,6 +504,10 @@ async function initStorageFromBackend(options = {}) {
       saveActivityLogs(localActivities.slice(0, 500));
     }
 
+    if (isAdminPage() && (data.users?.length > 0 || data.records?.length > 0 || data.activities?.length > 0)) {
+      window.dispatchEvent(new CustomEvent('vexaro-admin-data-refreshed'));
+    }
+
     localStorage.setItem('kyc_last_sync', String(Date.now()));
     processOfflineQueue();
     return true;
@@ -530,10 +534,11 @@ async function initStorageFromBackend(options = {}) {
 }
 
 function refreshAdminDataFromDatabase(options = {}) {
+  const isBackground = options.isBackground || false;
   return initStorageFromBackend({
-    forceFull: true,
+    forceFull: isBackground ? false : (options.forceFull !== undefined ? options.forceFull : true),
     requireDatabase: !options.silent,
-    replaceCache: true
+    replaceCache: !isBackground
   });
 }
 
