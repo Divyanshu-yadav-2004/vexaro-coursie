@@ -86,158 +86,215 @@ function normalizeDigits(value) {
 router.get('/', async (req, res) => {
   const { since } = req.query;
   const sinceMs = since ? Number(since) : 0;
-  
+
+  // Track query context for error logging
+  let _queryStage = 'init';
+  let _usersQuery = '';
+  let _kycQuery = '';
+  let _activityQuery = '';
+
   try {
     console.log('[sync:get] incoming request', {
       since: sinceMs,
-      database: process.env.DATABASE_URL ? 'DATABASE_URL' : (process.env.DB_NAME || 'vexaro_kyc')
+      database: process.env.DATABASE_URL ? 'DATABASE_URL configured' : (process.env.DB_NAME || 'vexaro_kyc')
     });
-    let usersQuery = 'SELECT * FROM users ORDER BY id ASC';
-    let kycQuery = 'SELECT * FROM kyc_records ORDER BY id ASC';
-    let activityQuery = 'SELECT * FROM activity_logs ORDER BY timestamp DESC';
-    let params = [];
+
+    let usersQuery, kycQuery, activityQuery, params;
 
     if (sinceMs > 0) {
-      // Incremental sync: check dataset-specific timestamp columns to ensure no records are missed.
-      // - users table uses updated_at and created_at (TIMESTAMPTZ)
-      // - kyc_records table uses updated_at, submitted_at, and created_at (TIMESTAMPTZ)
-      // - activity_logs table uses numeric timestamp (BIGINT ms) and created_at (TIMESTAMPTZ)
-      usersQuery = 'SELECT * FROM users WHERE updated_at > to_timestamp($1 / 1000.0) OR created_at > to_timestamp($1 / 1000.0) ORDER BY id ASC';
-      kycQuery = 'SELECT * FROM kyc_records WHERE updated_at > to_timestamp($1 / 1000.0) OR submitted_at > to_timestamp($1 / 1000.0) OR created_at > to_timestamp($1 / 1000.0) ORDER BY id ASC';
-      activityQuery = 'SELECT * FROM activity_logs WHERE timestamp > $1 OR created_at > to_timestamp($1 / 1000.0) ORDER BY timestamp DESC';
-      params = [sinceMs];
+      // ── Incremental sync ─────────────────────────────────────
+      // IMPORTANT: We pass a JS Date object for TIMESTAMPTZ columns.
+      // Passing a raw JS number causes pg to send it as PostgreSQL `text`,
+      // which makes `to_timestamp(text / 1000.0)` fail with a syntax error
+      // on Railway / Neon because division on text is not allowed.
+      // Passing a Date object makes pg serialise it as a proper timestamptz.
+      const sinceDate = new Date(sinceMs);
+
+      usersQuery    = 'SELECT * FROM users WHERE updated_at > $1 OR created_at > $1 ORDER BY id ASC';
+      kycQuery      = 'SELECT * FROM kyc_records WHERE updated_at > $1 OR submitted_at > $1 OR created_at > $1 ORDER BY id ASC';
+      // activity_logs.timestamp is a BIGINT (ms epoch) — compare directly with sinceMs ($2 = sinceDate for created_at)
+      activityQuery = 'SELECT * FROM activity_logs WHERE timestamp > $1 OR created_at > $2 ORDER BY timestamp DESC';
+
+      _usersQuery    = usersQuery;
+      _kycQuery      = kycQuery;
+      _activityQuery = activityQuery;
+
+      _queryStage = 'parallel-queries (incremental)';
+      const [usersRes, kycRes, activityRes] = await Promise.all([
+        pool.query(usersQuery,    [sinceDate]),
+        pool.query(kycQuery,      [sinceDate]),
+        pool.query(activityQuery, [sinceMs, sinceDate])
+      ]);
+
+      return _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs);
+    } else {
+      // ── Full sync ─────────────────────────────────────────────
+      usersQuery    = 'SELECT * FROM users ORDER BY id ASC';
+      kycQuery      = 'SELECT * FROM kyc_records ORDER BY id ASC';
+      activityQuery = 'SELECT * FROM activity_logs ORDER BY timestamp DESC';
+
+      _usersQuery    = usersQuery;
+      _kycQuery      = kycQuery;
+      _activityQuery = activityQuery;
+
+      _queryStage = 'parallel-queries (full sync)';
+      const [usersRes, kycRes, activityRes] = await Promise.all([
+        pool.query(usersQuery),
+        pool.query(kycQuery),
+        pool.query(activityQuery)
+      ]);
+
+      return _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs);
     }
 
-    // Run all three queries in parallel — much faster and prevents cascading timeouts
-    const [usersRes, kycRes, activityRes] = await Promise.all([
-      pool.query(usersQuery, params),
-      pool.query(kycQuery, params),
-      pool.query(activityQuery, params)
-    ]);
-
-    console.log('[sync:get] database query result', {
-      users: usersRes.rowCount,
-      kycRecords: kycRes.rowCount,
-      activities: activityRes.rowCount,
-      since: sinceMs
+  } catch (err) {
+    console.error('[sync:get] FAILED — stage:', _queryStage, '| error code:', err.code, '| message:', err.message);
+    console.error('[sync:get] queries at failure:', { users: _usersQuery, kyc: _kycQuery, activity: _activityQuery });
+    console.error('[sync:get] full stack:', err.stack || err);
+    return fail(res, 500, 'Database error during sync', {
+      stage: _queryStage,
+      code: err.code || null,
+      detail: err.message || null
     });
+  }
+});
 
-    // Map database records back to the static frontend objects format
-    const users = usersRes.rows.map(u => ({
-      id: u.role === 'admin' ? 'admin1' : u.role === 'owner' ? 'owner1' : 'u' + u.id,
-      name: u.name || (u.first_name ? `${u.first_name} ${u.last_name || ''}`.trim() : u.email),
-      firstName: u.first_name || '',
-      lastName: u.last_name || '',
-      email: u.email,
-      mobile: u.mobile || '',
-      address: u.address_line1,
-      addressLine2: u.address_line2,
-      state: u.state,
-      city: u.city,
-      pincode: u.pincode,
-      billAddress: u.billing_address_line1,
-      billAddress2: u.billing_address_line2,
-      billLandmark: u.bill_landmark,
-      billCity: u.bill_city,
-      billState: u.bill_state,
-      billPinCode: u.bill_pincode,
-      aadharNum: u.aadhar_num,
-      panNum: u.pan_num,
-      bankName: u.bank_name,
-      gender: u.gender,
-      agencyName: u.agency_name,
-      amazonTag: u.amazon_tag,
-      isActive: u.is_active,
-      isBlocked: u.is_blocked,
-      passwordReset: u.password_reset,
-      createdBy: u.created_by,
-      profilePhoto: u.profile_photo,
-      role: u.role,
-      kycStatus: u.kyc_status,
-      kycId: u.role === 'user' ? 'k' + u.id : null,
-      createdAt: u.created_at ? new Date(u.created_at).getTime() : Date.now(),
-      updatedAt: u.updated_at ? new Date(u.updated_at).getTime() : Date.now()
-    }));
+// ─── Helper: build and send the sync JSON response ────────────
+function _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs) {
+  console.log('[sync:get] database query result', {
+    users: usersRes.rowCount,
+    kycRecords: kycRes.rowCount,
+    activities: activityRes.rowCount,
+    since: sinceMs
+  });
 
-    const records = kycRes.rows.map(k => ({
-      id: 'k' + k.user_id,
-      userId: 'u' + k.user_id,
-      status: k.status,
-      rejectionReason: k.rejection_reason,
-      submittedAt: k.submitted_at ? new Date(k.submitted_at).getTime() : Date.now(),
-      reviewedAt: k.reviewed_at ? new Date(k.reviewed_at).getTime() : null,
-      reviewedBy: k.reviewed_by ? 'Admin' : null,
-      aadhaarFront: k.aadhaar_front_name ? {
-        data: k.aadhaar_front_data,
-        name: k.aadhaar_front_name,
-        size: k.aadhaar_front_size,
-        type: 'image/png'
-      } : null,
-      aadhaarBack: k.aadhaar_back_name ? {
-        data: k.aadhaar_back_data,
-        name: k.aadhaar_back_name,
-        size: k.aadhaar_back_size,
-        type: 'image/png'
-      } : null,
-      panCard: k.pan_card_name ? {
-        data: k.pan_card_data,
-        name: k.pan_card_name,
-        size: k.pan_card_size,
-        type: 'image/png'
-      } : null,
-      passbookPhoto: k.passbook_photo_name ? {
-        data: k.passbook_photo_data,
-        name: k.passbook_photo_name,
-        size: k.passbook_photo_size,
-        type: 'image/png'
-      } : null,
-      timeline: [
-        { step: 'Profile Completed', completedAt: k.submitted_at ? new Date(k.submitted_at).getTime() - 86400000 : Date.now() - 86400000, status: 'completed' },
-        { step: 'Documents Uploaded', completedAt: k.submitted_at ? new Date(k.submitted_at).getTime() - 3600000 : Date.now() - 3600000, status: 'completed' },
-        { step: 'Review Completed', completedAt: k.submitted_at ? new Date(k.submitted_at).getTime() - 1800000 : Date.now() - 1800000, status: 'completed' },
-        { step: 'KYC Submitted', completedAt: k.submitted_at ? new Date(k.submitted_at).getTime() : Date.now(), status: 'completed' },
-        { step: 'Under Verification', completedAt: k.status !== 'pending' ? (k.reviewed_at ? new Date(k.reviewed_at).getTime() : null) : null, status: k.status !== 'pending' ? 'completed' : 'active' },
-        { step: k.status === 'approved' ? 'Approved' : k.status === 'rejected' ? 'Rejected' : 'Awaiting Decision', completedAt: k.reviewed_at ? new Date(k.reviewed_at).getTime() : null, status: (k.status === 'approved' || k.status === 'rejected') ? 'completed' : 'pending' }
-      ],
-      updatedAt: k.updated_at ? new Date(k.updated_at).getTime() : Date.now()
-    }));
+  // Map database records back to the frontend objects format
+  const users = usersRes.rows.map(u => ({
+    id: u.role === 'admin' ? 'admin1' : u.role === 'owner' ? 'owner1' : 'u' + u.id,
+    name: u.name || (u.first_name ? `${u.first_name} ${u.last_name || ''}`.trim() : u.email),
+    firstName: u.first_name || '',
+    lastName: u.last_name || '',
+    email: u.email,
+    mobile: u.mobile || '',
+    address: u.address_line1,
+    addressLine2: u.address_line2,
+    state: u.state,
+    city: u.city,
+    pincode: u.pincode,
+    billAddress: u.billing_address_line1,
+    billAddress2: u.billing_address_line2,
+    billLandmark: u.bill_landmark,
+    billCity: u.bill_city,
+    billState: u.bill_state,
+    billPinCode: u.bill_pincode,
+    aadharNum: u.aadhar_num,
+    panNum: u.pan_num,
+    bankName: u.bank_name,
+    gender: u.gender,
+    agencyName: u.agency_name,
+    amazonTag: u.amazon_tag,
+    isActive: u.is_active,
+    isBlocked: u.is_blocked,
+    passwordReset: u.password_reset,
+    createdBy: u.created_by,
+    profilePhoto: u.profile_photo,
+    role: u.role,
+    kycStatus: u.kyc_status,
+    kycId: u.role === 'user' ? 'k' + u.id : null,
+    createdAt: u.created_at ? new Date(u.created_at).getTime() : Date.now(),
+    updatedAt: u.updated_at ? new Date(u.updated_at).getTime() : Date.now()
+  }));
 
-    const activities = activityRes.rows.map(row => ({
+  const records = kycRes.rows.map(k => ({
+    id: 'k' + k.user_id,
+    userId: 'u' + k.user_id,
+    status: k.status,
+    rejectionReason: k.rejection_reason,
+    submittedAt: k.submitted_at ? new Date(k.submitted_at).getTime() : Date.now(),
+    reviewedAt: k.reviewed_at ? new Date(k.reviewed_at).getTime() : null,
+    reviewedBy: k.reviewed_by ? 'Admin' : null,
+    aadhaarFront: k.aadhaar_front_name ? {
+      data: k.aadhaar_front_data,
+      name: k.aadhaar_front_name,
+      size: k.aadhaar_front_size,
+      type: 'image/png'
+    } : null,
+    aadhaarBack: k.aadhaar_back_name ? {
+      data: k.aadhaar_back_data,
+      name: k.aadhaar_back_name,
+      size: k.aadhaar_back_size,
+      type: 'image/png'
+    } : null,
+    panCard: k.pan_card_name ? {
+      data: k.pan_card_data,
+      name: k.pan_card_name,
+      size: k.pan_card_size,
+      type: 'image/png'
+    } : null,
+    passbookPhoto: k.passbook_photo_name ? {
+      data: k.passbook_photo_data,
+      name: k.passbook_photo_name,
+      size: k.passbook_photo_size,
+      type: 'image/png'
+    } : null,
+    timeline: [
+      { step: 'Profile Completed',  completedAt: k.submitted_at ? new Date(k.submitted_at).getTime() - 86400000 : Date.now() - 86400000, status: 'completed' },
+      { step: 'Documents Uploaded', completedAt: k.submitted_at ? new Date(k.submitted_at).getTime() - 3600000  : Date.now() - 3600000,  status: 'completed' },
+      { step: 'Review Completed',   completedAt: k.submitted_at ? new Date(k.submitted_at).getTime() - 1800000  : Date.now() - 1800000,  status: 'completed' },
+      { step: 'KYC Submitted',      completedAt: k.submitted_at ? new Date(k.submitted_at).getTime()            : Date.now(),            status: 'completed' },
+      { step: 'Under Verification', completedAt: k.status !== 'pending' ? (k.reviewed_at ? new Date(k.reviewed_at).getTime() : null) : null, status: k.status !== 'pending' ? 'completed' : 'active' },
+      { step: k.status === 'approved' ? 'Approved' : k.status === 'rejected' ? 'Rejected' : 'Awaiting Decision', completedAt: k.reviewed_at ? new Date(k.reviewed_at).getTime() : null, status: (k.status === 'approved' || k.status === 'rejected') ? 'completed' : 'pending' }
+    ],
+    updatedAt: k.updated_at ? new Date(k.updated_at).getTime() : Date.now()
+  }));
+
+  const activities = activityRes.rows.map(row => {
+    // Safe-parse details: a single malformed JSON row must not crash the entire sync
+    let details = {};
+    if (row.details) {
+      if (typeof row.details === 'object') {
+        details = row.details; // pg already parsed JSONB columns
+      } else {
+        try {
+          details = JSON.parse(row.details);
+        } catch (parseErr) {
+          console.warn('[sync:get] activity_logs row id=' + row.id + ' has unparseable details:', parseErr.message);
+        }
+      }
+    }
+    return {
       id: 'act_' + row.id,
       userId: row.user_id,
       userName: row.user_name,
       action: row.action,
       timestamp: Number(row.timestamp),
-      details: row.details ? JSON.parse(row.details) : {},
+      details,
       icon: row.icon
-    }));
-
-    const responsePayload = {
-      success: true,
-      users,
-      records,
-      activities
     };
+  });
 
-    console.log('[sync:get] admin/frontend response', {
-      users: users.length,
-      records: records.length,
-      activities: activities.length,
-      latestRecord: records[0] ? {
-        id: records[0].id,
-        userId: records[0].userId,
-        status: records[0].status,
-        submittedAt: records[0].submittedAt
-      } : null
-    });
+  const responsePayload = {
+    success: true,
+    users,
+    records,
+    activities
+  };
 
-    res.json(responsePayload);
+  console.log('[sync:get] admin/frontend response', {
+    users: users.length,
+    records: records.length,
+    activities: activities.length,
+    latestRecord: records[0] ? {
+      id: records[0].id,
+      userId: records[0].userId,
+      status: records[0].status,
+      submittedAt: records[0].submittedAt
+    } : null
+  });
 
-  } catch (err) {
-    console.error('Fetch sync data error:', err);
-    return fail(res, 500, 'Database error during sync');
-  }
-});
+  return res.json(responsePayload);
+}
+
 
 // ─── POST /api/sync/user ──────────────────────────────────────
 router.post('/user', async (req, res) => {
