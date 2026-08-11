@@ -87,7 +87,32 @@ function normalizeDigits(value) {
 // ─── GET /api/sync ────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const { since } = req.query;
-  const sinceMs = since ? Number(since) : 0;
+  const now = Date.now();
+  const CLOCK_SKEW_BUFFER_MS = 60 * 1000; // 1 minute buffer for clock skew
+
+  let sinceMs = 0;
+  let isFullSync = false;
+  let syncReason = 'valid_incremental';
+
+  // ── 1. Validate `since` parameter ──────────────────────────
+  if (since === undefined || since === null || since === '') {
+    isFullSync = true;
+    syncReason = 'since_missing';
+  } else {
+    const parsed = Number(since);
+    if (isNaN(parsed)) {
+      isFullSync = true;
+      syncReason = 'since_nan';
+    } else if (parsed <= 0) {
+      isFullSync = true;
+      syncReason = 'since_zero_or_negative';
+    } else if (parsed > now + CLOCK_SKEW_BUFFER_MS) {
+      isFullSync = true;
+      syncReason = `since_future_timestamp (received: ${parsed}, serverNow: ${now})`;
+    } else {
+      sinceMs = parsed;
+    }
+  }
 
   // Track query context for error logging
   let _queryStage = 'init';
@@ -96,25 +121,23 @@ router.get('/', async (req, res) => {
   let _activityQuery = '';
 
   try {
-    console.log('[sync:get] incoming request', {
-      since: sinceMs,
+    console.log('[sync:get] request received', {
+      receivedSince: since !== undefined ? since : null,
+      parsedSinceMs: sinceMs,
+      syncType: isFullSync ? 'FULL' : 'INCREMENTAL',
+      syncReason: syncReason,
+      serverTime: now,
       database: process.env.DATABASE_URL ? 'DATABASE_URL configured' : (process.env.DB_NAME || 'vexaro_kyc')
     });
 
-    let usersQuery, kycQuery, activityQuery, params;
+    let usersQuery, kycQuery, activityQuery;
 
-    if (sinceMs > 0) {
+    if (!isFullSync && sinceMs > 0) {
       // ── Incremental sync ─────────────────────────────────────
-      // IMPORTANT: We pass a JS Date object for TIMESTAMPTZ columns.
-      // Passing a raw JS number causes pg to send it as PostgreSQL `text`,
-      // which makes `to_timestamp(text / 1000.0)` fail with a syntax error
-      // on Railway / Neon because division on text is not allowed.
-      // Passing a Date object makes pg serialise it as a proper timestamptz.
       const sinceDate = new Date(sinceMs);
 
       usersQuery    = 'SELECT * FROM users WHERE updated_at > $1 OR created_at > $1 ORDER BY id ASC';
       kycQuery      = 'SELECT * FROM kyc_records WHERE updated_at > $1 OR submitted_at > $1 OR created_at > $1 ORDER BY id ASC';
-      // activity_logs.timestamp is a BIGINT (ms epoch) — compare directly with sinceMs ($2 = sinceDate for created_at)
       activityQuery = 'SELECT * FROM activity_logs WHERE timestamp > $1 OR created_at > $2 ORDER BY timestamp DESC';
 
       _usersQuery    = usersQuery;
@@ -128,7 +151,7 @@ router.get('/', async (req, res) => {
         pool.query(activityQuery, [sinceMs, sinceDate])
       ]);
 
-      return _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs);
+      return _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, since, sinceMs, false, syncReason, now);
     } else {
       // ── Full sync ─────────────────────────────────────────────
       usersQuery    = 'SELECT * FROM users ORDER BY id ASC';
@@ -146,7 +169,7 @@ router.get('/', async (req, res) => {
         pool.query(activityQuery)
       ]);
 
-      return _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs);
+      return _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, since, 0, true, syncReason, now);
     }
 
   } catch (err) {
@@ -162,14 +185,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── Helper: build and send the sync JSON response ────────────
-function _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs) {
-  console.log('[sync:get] database query result', {
-    users: usersRes.rowCount,
-    kycRecords: kycRes.rowCount,
-    activities: activityRes.rowCount,
-    since: sinceMs
-  });
-
+function _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, rawSince, sinceMs, isFullSync, syncReason, serverTime) {
   // Map database records back to the frontend objects format
   const users = usersRes.rows.map(u => ({
     id: u.role === 'admin' ? 'admin1' : u.role === 'owner' ? 'owner1' : 'u' + u.id,
@@ -251,11 +267,10 @@ function _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs) 
   }));
 
   const activities = activityRes.rows.map(row => {
-    // Safe-parse details: a single malformed JSON row must not crash the entire sync
     let details = {};
     if (row.details) {
       if (typeof row.details === 'object') {
-        details = row.details; // pg already parsed JSONB columns
+        details = row.details;
       } else {
         try {
           details = JSON.parse(row.details);
@@ -275,15 +290,30 @@ function _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, sinceMs) 
     };
   });
 
+  console.log('[sync:get] sync complete', {
+    receivedSince: rawSince !== undefined ? rawSince : null,
+    syncType: isFullSync ? 'FULL' : 'INCREMENTAL',
+    syncReason: syncReason,
+    returnedCounts: {
+      users: users.length,
+      kycRecords: records.length,
+      activities: activities.length
+    },
+    finalSyncTimestamp: serverTime
+  });
+
   const responsePayload = {
     success: true,
+    syncType: isFullSync ? 'FULL' : 'INCREMENTAL',
+    syncReason: syncReason,
+    serverTime: serverTime,
     users,
     records,
     activities
   };
 
-  console.log('[sync:get] admin/frontend response', {
-    users: users.length,
+  return res.json(responsePayload);
+}sers.length,
     records: records.length,
     activities: activities.length,
     latestRecord: records[0] ? {

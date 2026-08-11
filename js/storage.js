@@ -393,13 +393,85 @@ async function syncDelete(endpoint, payload) {
   }
 }
 
+// ─── DEDUPLICATION HELPERS ────────────────────────────────────
+
+function deduplicateUsers(users) {
+  if (!Array.isArray(users)) return [];
+  const seenIds = new Set();
+  const seenEmails = new Set();
+  const result = [];
+
+  for (const user of users) {
+    if (!user) continue;
+    const idKey = user.id ? String(user.id) : null;
+    const emailKey = user.email ? String(user.email).trim().toLowerCase() : null;
+
+    if (idKey && seenIds.has(idKey)) continue;
+    if (emailKey && seenEmails.has(emailKey)) continue;
+
+    if (idKey) seenIds.add(idKey);
+    if (emailKey) seenEmails.add(emailKey);
+    result.push(user);
+  }
+  return result;
+}
+
+function deduplicateRecords(records) {
+  if (!Array.isArray(records)) return [];
+  const seenIds = new Set();
+  const seenUserIds = new Set();
+  const result = [];
+
+  for (const rec of records) {
+    if (!rec) continue;
+    const idKey = rec.id ? String(rec.id) : null;
+    const userIdKey = rec.userId ? String(rec.userId) : null;
+
+    if (idKey && seenIds.has(idKey)) continue;
+    if (userIdKey && seenUserIds.has(userIdKey)) continue;
+
+    if (idKey) seenIds.add(idKey);
+    if (userIdKey) seenUserIds.add(userIdKey);
+    result.push(rec);
+  }
+  return result;
+}
+
+function deduplicateActivities(activities) {
+  if (!Array.isArray(activities)) return [];
+  const seenIds = new Set();
+  const result = [];
+
+  for (const act of activities) {
+    if (!act || !act.id) continue;
+    const idKey = String(act.id);
+    if (seenIds.has(idKey)) continue;
+    seenIds.add(idKey);
+    result.push(act);
+  }
+  return result;
+}
+
 async function initStorageFromBackend(options = {}) {
   const { forceFull = false, requireDatabase = false, replaceCache = false } = options;
-  const lastSync = forceFull ? 0 : Number(localStorage.getItem('kyc_last_sync')) || 0;
+
+  const now = Date.now();
+  const rawLastSync = localStorage.getItem('kyc_last_sync');
+  let parsedLastSync = Number(rawLastSync) || 0;
+
+  // Detect invalid, missing, zero, negative, NaN, or future timestamps
+  let lastSync = parsedLastSync;
+  if (forceFull || isNaN(parsedLastSync) || parsedLastSync <= 0 || parsedLastSync > now + 60000) {
+    if (parsedLastSync > now + 60000) {
+      console.warn(`[initStorageFromBackend] Recovering from invalid future kyc_last_sync timestamp (${parsedLastSync} vs current ${now}). Performing FULL SYNC.`);
+    }
+    lastSync = 0;
+  }
 
   try {
     console.log('[initStorageFromBackend] fetching sync data', {
       since: lastSync,
+      rawLastSync,
       forceFull,
       requireDatabase,
       replaceCache,
@@ -411,6 +483,8 @@ async function initStorageFromBackend(options = {}) {
       status: res.status,
       ok: res.ok,
       success: data && data.success,
+      syncType: data && data.syncType,
+      serverTime: data && data.serverTime,
       users: Array.isArray(data && data.users) ? data.users.length : null,
       records: Array.isArray(data && data.records) ? data.records.length : null,
       activities: Array.isArray(data && data.activities) ? data.activities.length : null
@@ -419,14 +493,16 @@ async function initStorageFromBackend(options = {}) {
 
     showOfflineBanner(false);
 
-    if (replaceCache && lastSync === 0) {
+    const isFullSyncPayload = lastSync === 0 || replaceCache || data.syncType === 'FULL' || data.isFullSync === true;
+
+    if (isFullSyncPayload) {
       if (!validateSyncPayload(data)) {
         throw new Error('Invalid database response — existing records were kept');
       }
 
-      let users = data.users;
-      let records = data.records;
-      let activities = data.activities;
+      let users = deduplicateUsers(data.users || []);
+      let records = deduplicateRecords(data.records || []);
+      let activities = deduplicateActivities(data.activities || []);
       let source = 'database';
 
       if (isAdminPage() && records.length === 0) {
@@ -437,9 +513,9 @@ async function initStorageFromBackend(options = {}) {
             records: fallback.records.length,
             activities: fallback.activities.length
           });
-          users = fallback.users;
-          records = fallback.records;
-          activities = fallback.activities;
+          users = deduplicateUsers(fallback.users);
+          records = deduplicateRecords(fallback.records);
+          activities = deduplicateActivities(fallback.activities);
           source = fallback.source;
         }
       }
@@ -451,30 +527,36 @@ async function initStorageFromBackend(options = {}) {
         saveKYCRecords(records);
         saveActivityLogs(activities);
       }
-      localStorage.setItem('kyc_last_sync', String(Date.now()));
+
+      const finalSyncTs = data.serverTime || Date.now();
+      localStorage.setItem('kyc_last_sync', String(finalSyncTs));
       if (!isAdminPage()) processOfflineQueue();
       window.dispatchEvent(new CustomEvent('vexaro-admin-data-refreshed'));
       return { users, records, activities };
     }
 
-    // 1. Conflict Resolution / Incremental Sync for Users
+    // ── Incremental sync merging ──
     if (data.users && data.users.length > 0) {
       let localUsers = getUsers();
       data.users.forEach(dbU => {
-        const idx = localUsers.findIndex(u => u.email.toLowerCase() === dbU.email.toLowerCase());
+        const idx = localUsers.findIndex(u => (u.id && dbU.id && String(u.id) === String(dbU.id)) || u.email.toLowerCase() === dbU.email.toLowerCase());
         if (idx === -1) {
           localUsers.push(dbU);
         } else {
           const localUpdatedAt = localUsers[idx].updatedAt || 0;
-          if (dbU.updatedAt > localUpdatedAt) {
+          if ((dbU.updatedAt || 0) >= localUpdatedAt) {
             localUsers[idx] = { ...localUsers[idx], ...dbU };
           }
         }
       });
-      saveUsers(localUsers);
+      localUsers = deduplicateUsers(localUsers);
+      if (isAdminPage()) {
+        setAdminCache(localUsers, getKYCRecords(), getActivityLogs());
+      } else {
+        saveUsers(localUsers);
+      }
     }
 
-    // 2. Conflict Resolution / Incremental Sync for KYC Records
     if (data.records && data.records.length > 0) {
       let localRecords = getKYCRecords();
       data.records.forEach(dbK => {
@@ -483,34 +565,45 @@ async function initStorageFromBackend(options = {}) {
           localRecords.push(dbK);
         } else {
           const localUpdatedAt = localRecords[idx].updatedAt || 0;
-          if (dbK.updatedAt > localUpdatedAt) {
+          if ((dbK.updatedAt || 0) >= localUpdatedAt) {
             localRecords[idx] = { ...localRecords[idx], ...dbK };
           }
         }
       });
-      saveKYCRecords(localRecords);
+      localRecords = deduplicateRecords(localRecords);
+      if (isAdminPage()) {
+        setAdminCache(getUsers(), localRecords, getActivityLogs());
+      } else {
+        saveKYCRecords(localRecords);
+      }
     }
 
-    // 3. Sync Activities
     if (data.activities && data.activities.length > 0) {
       let localActivities = getActivityLogs();
       data.activities.forEach(dbA => {
-        const idx = localActivities.findIndex(a => a.id === dbA.id);
+        const idx = localActivities.findIndex(a => String(a.id) === String(dbA.id));
         if (idx === -1) {
           localActivities.unshift(dbA);
         }
       });
+      localActivities = deduplicateActivities(localActivities);
       localActivities.sort((a, b) => b.timestamp - a.timestamp);
-      saveActivityLogs(localActivities.slice(0, 500));
+      if (isAdminPage()) {
+        setAdminCache(getUsers(), getKYCRecords(), localActivities.slice(0, 500));
+      } else {
+        saveActivityLogs(localActivities.slice(0, 500));
+      }
     }
 
     if (isAdminPage() && (data.users?.length > 0 || data.records?.length > 0 || data.activities?.length > 0)) {
       window.dispatchEvent(new CustomEvent('vexaro-admin-data-refreshed'));
     }
 
-    localStorage.setItem('kyc_last_sync', String(Date.now()));
+    const finalSyncTs = data.serverTime || Date.now();
+    localStorage.setItem('kyc_last_sync', String(finalSyncTs));
     processOfflineQueue();
     return true;
+
   } catch (err) {
     console.warn('Backend sync unavailable, using localStorage cache:', err.message);
     if (isAdminPage()) {
