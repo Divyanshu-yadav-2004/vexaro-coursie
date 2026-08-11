@@ -3,6 +3,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const {
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  sendSecurityNotificationEmail
+} = require('../services/email');
 
 const router = express.Router();
 
@@ -100,6 +105,14 @@ router.post('/register', async (req, res) => {
     await client.query('COMMIT');
 
     const user = result.rows[0];
+
+    // Trigger Welcome Email (non-blocking)
+    if (user.email) {
+      sendWelcomeEmail(user).catch(emailErr =>
+        console.warn('[auth:register] welcome email failed (non-critical):', emailErr.message)
+      );
+    }
+
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
       process.env.JWT_SECRET || 'vexaro_super_secret_jwt_key_2026',
@@ -144,6 +157,18 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET || 'vexaro_super_secret_jwt_key_2026',
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
+
+    // Send Security Notification (non-blocking)
+    if (user.email) {
+      const userAgent = req.headers['user-agent'] || 'Web Browser';
+      sendSecurityNotificationEmail(user, {
+        event: 'Account Login',
+        eventTime: new Date(),
+        deviceInfo: userAgent.length > 80 ? userAgent.substring(0, 77) + '...' : userAgent,
+      }).catch(emailErr =>
+        console.warn('[auth:login] security email notification failed (non-critical):', emailErr.message)
+      );
+    }
 
     res.json({ token, user: formatUser(user) });
   } catch (err) {
@@ -209,6 +234,44 @@ router.post('/demo-login', async (req, res) => {
   } catch (err) {
     console.error('Demo login error:', err);
     res.status(500).json({ error: 'Server error during demo login' });
+  }
+});
+
+// ─── POST /api/auth/forgot-password ───────────────────────────
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email address is required' });
+  }
+
+  try {
+    const cleanEmail = email.toLowerCase().trim();
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [cleanEmail]);
+
+    // Always respond with success to prevent user enumeration
+    if (result.rows.length === 0) {
+      return res.json({ message: 'If an account exists with that email, a password reset link has been sent.' });
+    }
+
+    const user = result.rows[0];
+    const resetToken = jwt.sign(
+      { id: user.id, email: user.email, purpose: 'password_reset' },
+      process.env.JWT_SECRET || 'vexaro_super_secret_jwt_key_2026',
+      { expiresIn: '1h' }
+    );
+
+    const portalBase = process.env.APP_BASE_URL || process.env.VEXARO_PORTAL_URL || 'https://vexaro.co.in';
+    const resetUrl = `${portalBase}/reset-password.html?token=${resetToken}`;
+
+    // Send email asynchronously (non-blocking)
+    sendPasswordResetEmail(user, resetUrl, 60).catch(err =>
+      console.warn('[auth:forgot-password] email send failed:', err.message)
+    );
+
+    res.json({ message: 'If an account exists with that email, a password reset link has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Server error processing password reset request' });
   }
 });
 

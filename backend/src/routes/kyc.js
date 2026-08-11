@@ -159,6 +159,7 @@ router.post(
       if (userRow.rows[0]?.email) {
         sendKycSubmittedEmail({
           ...userRow.rows[0],
+          kycId: kycRow.id,                            // application-scoped dedupe
           submittedAt: kycRow.submitted_at || new Date(),
         }).catch(emailErr =>
           console.warn('[kyc:submit] email notification failed (non-critical):', emailErr.message)
@@ -285,9 +286,9 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
       [status, status === 'rejected' ? rejectionReason : null, req.user.id, id]
     );
 
-    // Update user's kyc_status to match
+    // Update user's kyc_status to match — include email so email notifications can be sent
     const userResult = await client.query(
-      `UPDATE users SET kyc_status = $1 WHERE id = $2 RETURNING id, name, first_name, last_name, mobile`,
+      `UPDATE users SET kyc_status = $1 WHERE id = $2 RETURNING id, name, first_name, last_name, email, mobile`,
       [status, result.rows[0].user_id]
     );
 
@@ -335,6 +336,8 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
     if (statusChanged && userInfo?.email) {
       const emailPayload = {
         ...userInfo,
+        // kycId is used as the dedupe key scope — prevents re-sending for same application
+        kycId: kycRecord.id,
         submittedAt: kycRecord.submitted_at,
         reviewedAt:  kycRecord.reviewed_at || new Date(),
         rejectionReason: kycRecord.rejection_reason,
@@ -348,6 +351,12 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
           console.warn('[kyc:status] rejected email failed (non-critical):', err.message)
         );
       }
+    } else if (statusChanged && !userInfo?.email) {
+      console.warn('[kyc:status] email skipped — user email not available', {
+        kycId: kycRecord.id,
+        userId: kycRecord.user_id,
+        status,
+      });
     }
 
     console.info('[kyc] status updated', {
