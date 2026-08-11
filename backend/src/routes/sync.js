@@ -1,7 +1,9 @@
 const express = require('express');
 const pool = require('../db');
 const { sendKycApprovedWhatsApp } = require('../services/whatsapp');
+const { sendKycApprovedEmail, sendKycRejectedEmail } = require('../services/email');
 const router = express.Router();
+
 
 // Helper for consistent error responses
 function fail(res, code, message, details = null) {
@@ -561,6 +563,28 @@ router.post('/kyc', async (req, res) => {
           mode: notifyErr.mode || null,
           response: notifyErr.response || null,
         };
+      }
+    }
+
+    // ── Email notification (fire-and-forget) ──────────────────────────
+    const statusChanged = finalStatus !== previousStatus;
+    if (statusChanged && k.email) {
+      const kycRow = kycResult.rows[0];
+      const emailPayload = {
+        ...userRes.rows[0],
+        email: k.email,
+        submittedAt: kycRow?.submitted_at,
+        reviewedAt:  kycRow?.reviewed_at || new Date(),
+        rejectionReason: kycRow?.rejection_reason,
+      };
+      if (finalStatus === 'approved') {
+        sendKycApprovedEmail(emailPayload).catch(err =>
+          console.warn('[sync:kyc] approved email failed (non-critical):', err.message)
+        );
+      } else if (finalStatus === 'rejected') {
+        sendKycRejectedEmail(emailPayload).catch(err =>
+          console.warn('[sync:kyc] rejected email failed (non-critical):', err.message)
+        );
       }
     }
 

@@ -6,6 +6,7 @@ const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const roleGuard = require('../middleware/roleGuard');
 const { sendKycApprovedWhatsApp } = require('../services/whatsapp');
+const { sendKycSubmittedEmail, sendKycApprovedEmail, sendKycRejectedEmail } = require('../services/email');
 
 const router = express.Router();
 
@@ -147,6 +148,23 @@ router.post(
         [userId]
       );
 
+      // Fetch user details for email notification
+      const userRow = await pool.query(
+        'SELECT id, email, name, first_name, last_name FROM users WHERE id = $1',
+        [userId]
+      );
+      const kycRow = result.rows[0];
+
+      // Send KYC Submitted email (non-blocking — never fails the HTTP response)
+      if (userRow.rows[0]?.email) {
+        sendKycSubmittedEmail({
+          ...userRow.rows[0],
+          submittedAt: kycRow.submitted_at || new Date(),
+        }).catch(emailErr =>
+          console.warn('[kyc:submit] email notification failed (non-critical):', emailErr.message)
+        );
+      }
+
       res.status(201).json({ message: 'KYC submitted successfully', kyc: formatKYC(result.rows[0]) });
     } catch (err) {
       console.error('KYC submit error:', err);
@@ -282,14 +300,19 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
     });
 
     let whatsapp = { sent: false, skipped: true, reason: 'not_applicable' };
-    const shouldNotify = status === 'approved' && previousStatus !== 'approved' && userResult.rows[0];
-    if (shouldNotify) {
+    const statusChanged = previousStatus !== status;
+    const kycRecord = result.rows[0];
+    const userInfo = userResult.rows[0];
+
+    // ── WhatsApp (approved only) ──────────────────────────────
+    const shouldWhatsApp = status === 'approved' && statusChanged && userInfo;
+    if (shouldWhatsApp) {
       try {
-        whatsapp = await sendKycApprovedWhatsApp(userResult.rows[0]);
+        whatsapp = await sendKycApprovedWhatsApp(userInfo);
       } catch (notifyErr) {
         console.error('[kyc:status] WhatsApp notification failed after approval commit', {
-          kycId: result.rows[0].id,
-          userId: result.rows[0].user_id,
+          kycId: kycRecord.id,
+          userId: kycRecord.user_id,
           reason: notifyErr.message,
           status: notifyErr.status || null,
           to: notifyErr.to || null,
@@ -305,6 +328,25 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
           mode: notifyErr.mode || null,
           response: notifyErr.response || null,
         };
+      }
+    }
+
+    // ── Email notification (approved + rejected, fire-and-forget) ──
+    if (statusChanged && userInfo?.email) {
+      const emailPayload = {
+        ...userInfo,
+        submittedAt: kycRecord.submitted_at,
+        reviewedAt:  kycRecord.reviewed_at || new Date(),
+        rejectionReason: kycRecord.rejection_reason,
+      };
+      if (status === 'approved') {
+        sendKycApprovedEmail(emailPayload).catch(err =>
+          console.warn('[kyc:status] approved email failed (non-critical):', err.message)
+        );
+      } else if (status === 'rejected') {
+        sendKycRejectedEmail(emailPayload).catch(err =>
+          console.warn('[kyc:status] rejected email failed (non-critical):', err.message)
+        );
       }
     }
 
@@ -343,6 +385,33 @@ router.patch('/:id/status', authMiddleware, roleGuard('admin', 'owner'), async (
   } finally {
     client.release();
   }
+});
+
+// ─── GET /api/kyc/email-preview ───────────────────────────────
+// Preview generated email HTML directly in browser
+router.get('/email-preview', (req, res) => {
+  const { type = 'submitted' } = req.query;
+  const { buildKycSubmittedHtml, buildKycApprovedHtml, buildKycRejectedHtml } = require('../services/email');
+
+  const sampleUser = {
+    name: 'Rahul Sharma',
+    userId: 3,
+    submittedAt: new Date(),
+    reviewedAt: new Date(),
+    rejectionReason: 'The PAN Card photo provided is blurry and unreadable. Please upload a clear document image.',
+  };
+
+  let html;
+  if (type === 'approved') {
+    html = buildKycApprovedHtml(sampleUser);
+  } else if (type === 'rejected') {
+    html = buildKycRejectedHtml(sampleUser);
+  } else {
+    html = buildKycSubmittedHtml(sampleUser);
+  }
+
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
 });
 
 module.exports = router;
