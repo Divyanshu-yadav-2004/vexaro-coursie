@@ -13,8 +13,8 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
 
   const handleSubmit = async () => {
     setSubmitError('');
-    if (!documentData.aadhaarFront?.file || !documentData.aadhaarBack?.file || !documentData.panCard?.file) {
-      setSubmitError('Please go back and attach all three KYC documents before submitting.');
+    if (!documentData.aadhaarFront?.file || !documentData.aadhaarBack?.file || !documentData.panCard?.file || !documentData.passbookPhoto?.file) {
+      setSubmitError('Please go back and attach Aadhaar Front, Aadhaar Back, PAN Card, and Passbook before submitting.');
       return;
     }
 
@@ -25,7 +25,7 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
         documentData.aadhaarFront?.file,
         documentData.aadhaarBack?.file,
         documentData.panCard?.file,
-        documentData.passbookPhoto?.file || null
+        documentData.passbookPhoto.file
       );
       onSubmit(kyc);
     } catch (err) {
@@ -218,7 +218,7 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
               <div className="flex-1 min-w-0">
                 <span className="text-[10px] font-bold text-slate-400 block flex items-center gap-1">
                   Passbook Photo
-                  <span className="text-[8px] text-slate-600 border border-slate-700 rounded-full px-1.5 py-0.5 uppercase">Optional</span>
+                  <span className="text-[8px] text-brand-orange border border-brand-orange/40 rounded-full px-1.5 py-0.5 uppercase">Required</span>
                 </span>
                 {documentData.passbookPhoto ? (
                   <>

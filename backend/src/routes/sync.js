@@ -336,47 +336,86 @@ router.post('/user', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Check if user already exists
-    const findRes = await client.query('SELECT id, kyc_status, updated_at FROM users WHERE email = $1', [u.email.toLowerCase()]);
+    // Check if user already exists by email OR mobile
+    let findRes;
+    const cleanEmail = u.email.toLowerCase();
+    const cleanMobile = u.mobile ? normalizeDigits(u.mobile) : null;
+
+    if (cleanMobile) {
+      findRes = await client.query(
+        'SELECT id, email, mobile, kyc_status, updated_at FROM users WHERE email = $1 OR (mobile IS NOT NULL AND mobile = $2) ORDER BY id ASC',
+        [cleanEmail, cleanMobile]
+      );
+    } else {
+      findRes = await client.query(
+        'SELECT id, email, mobile, kyc_status, updated_at FROM users WHERE email = $1',
+        [cleanEmail]
+      );
+    }
 
     let userResult;
     if (findRes.rows.length > 0) {
-      // Conflict Resolution check: only update if client data is newer than DB data
       const dbUser = findRes.rows[0];
       const dbUpdatedAt = new Date(dbUser.updated_at).getTime();
       const clientUpdatedAt = u.updatedAt ? Number(u.updatedAt) : 0;
 
       if (clientUpdatedAt > 0 && dbUpdatedAt > clientUpdatedAt) {
-        // DB is newer, don't overwrite it
         await client.query('COMMIT');
         console.log('[sync:user] skipped older client payload', {
           email: u.email,
+          dbUserId: dbUser.id,
           dbUpdatedAt,
           clientUpdatedAt
         });
-        return success(res, 'DB has newer version, skip update', { skipped: true });
+        return success(res, 'DB has newer version, skip update', { skipped: true, user: dbUser });
       }
 
-      // Update existing user
+      // Update existing user by ID (using COALESCE to preserve existing non-null database fields)
       userResult = await client.query(
         `UPDATE users
-         SET name = $1, first_name = $2, last_name = $3, mobile = $4, gender = $5, agency_name = $6,
-             address_line1 = $7, address_line2 = $8, city = $9, state = $10, pincode = $11,
-             billing_address_line1 = $12, billing_address_line2 = $13,
-             profile_photo = $14, kyc_status = $15, aadhar_num = $16, pan_num = $17, bank_name = $18,
-             bill_landmark = $19, bill_city = $20, bill_state = $21, bill_pincode = $22,
-             amazon_tag = $23, is_active = $24, is_blocked = $25, password_reset = $26,
-             created_by = $27, updated_at = NOW()
-         WHERE email = $28
+         SET name                  = COALESCE($1, name),
+             first_name            = COALESCE($2, first_name),
+             last_name             = COALESCE($3, last_name),
+             mobile                = COALESCE($4, mobile),
+             gender                = COALESCE($5, gender),
+             agency_name           = COALESCE($6, agency_name),
+             address_line1         = COALESCE($7, address_line1),
+             address_line2         = COALESCE($8, address_line2),
+             city                  = COALESCE($9, city),
+             state                 = COALESCE($10, state),
+             pincode               = COALESCE($11, pincode),
+             billing_address_line1 = COALESCE($12, billing_address_line1),
+             billing_address_line2 = COALESCE($13, billing_address_line2),
+             profile_photo         = COALESCE($14, profile_photo),
+             kyc_status            = COALESCE($15, kyc_status),
+             aadhar_num            = COALESCE($16, aadhar_num),
+             pan_num               = COALESCE($17, pan_num),
+             bank_name             = COALESCE($18, bank_name),
+             bill_landmark         = COALESCE($19, bill_landmark),
+             bill_city             = COALESCE($20, bill_city),
+             bill_state            = COALESCE($21, bill_state),
+             bill_pincode          = COALESCE($22, bill_pincode),
+             amazon_tag            = COALESCE($23, amazon_tag),
+             is_active             = COALESCE($24, is_active),
+             is_blocked            = COALESCE($25, is_blocked),
+             password_reset        = COALESCE($26, password_reset),
+             created_by            = COALESCE($27, created_by),
+             updated_at            = NOW()
+         WHERE id = $28
          RETURNING *`,
         [
-          u.name, u.firstName, u.lastName, u.mobile, u.gender || 'male', u.agencyName,
-          u.address, u.addressLine2, u.city, u.state, u.pincode,
-          u.billAddress, u.billAddress2,
-          u.profilePhoto, u.kycStatus || 'not_started', u.aadharNum, u.panNum, u.bankName,
-          u.billLandmark, u.billCity, u.billState, u.billPinCode,
-          u.amazonTag || 'na', u.isActive !== false, u.isBlocked === true, u.passwordReset === true,
-          u.createdBy || 'superadmin', u.email.toLowerCase()
+          u.name || null, u.firstName || null, u.lastName || null, cleanMobile || null,
+          u.gender || null, u.agencyName || null, u.address || null, u.addressLine2 || null,
+          u.city || null, u.state || null, u.pincode || null,
+          u.billAddress || null, u.billAddress2 || null,
+          u.profilePhoto || null, u.kycStatus || null, u.aadharNum || null, u.panNum || null, u.bankName || null,
+          u.billLandmark || null, u.billCity || null, u.billState || null, u.billPinCode || null,
+          u.amazonTag || null,
+          u.isActive !== undefined ? u.isActive : null,
+          u.isBlocked !== undefined ? u.isBlocked : null,
+          u.passwordReset !== undefined ? u.passwordReset : null,
+          u.createdBy || null,
+          dbUser.id
         ]
       );
     } else {
@@ -392,7 +431,7 @@ router.post('/user', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
          RETURNING *`,
         [
-          u.name, u.firstName, u.lastName, u.email.toLowerCase(), defaultHash, u.mobile, role, u.gender || 'male', u.agencyName,
+          u.name, u.firstName, u.lastName, cleanEmail, defaultHash, cleanMobile, role, u.gender || 'male', u.agencyName,
           u.address, u.addressLine2, u.city, u.state, u.pincode, u.billAddress, u.billAddress2,
           u.profilePhoto, u.kycStatus || 'not_started', u.aadharNum, u.panNum, u.bankName, u.billLandmark, u.billCity, u.billState, u.billPinCode,
           u.amazonTag || 'na', u.isActive !== false, u.isBlocked === true, u.passwordReset === true, u.createdBy || 'superadmin'
@@ -507,12 +546,7 @@ router.post('/kyc', async (req, res) => {
         ]
       );
     } else {
-      if (!k.aadhaarFront || !k.aadhaarBack || !k.panCard) {
-        await client.query('ROLLBACK');
-        return fail(res, 400, 'aadhaarFront, aadhaarBack, and panCard are required for a new KYC record');
-      }
-
-      // Insert new KYC record
+      // Insert new KYC record (allow partial uploads)
       kycResult = await client.query(
         `INSERT INTO kyc_records
           (user_id, aadhaar_front_name, aadhaar_front_size, aadhaar_front_data,

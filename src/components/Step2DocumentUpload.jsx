@@ -88,7 +88,8 @@ export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
     if (
       uploadStatus.aadhaarFront === 'attached' &&
       uploadStatus.aadhaarBack === 'attached' &&
-      uploadStatus.panCard === 'attached'
+      uploadStatus.panCard === 'attached' &&
+      uploadStatus.passbookPhoto === 'attached'
     ) {
       onNext(docs);
     }
@@ -97,7 +98,8 @@ export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
   const isFormValid = 
     uploadStatus.aadhaarFront === 'attached' &&
     uploadStatus.aadhaarBack === 'attached' &&
-    uploadStatus.panCard === 'attached';
+    uploadStatus.panCard === 'attached' &&
+    uploadStatus.passbookPhoto === 'attached';
 
   const renderDropzone = (key, label) => {
     const status = uploadStatus[key];
@@ -216,7 +218,7 @@ export default function Step2DocumentUpload({ initialData, onNext, onBack }) {
             <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wide flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-brand-orange" />
               Passbook Photo
-              <span className="ml-1 text-[9px] font-semibold text-slate-500 border border-slate-700 rounded-full px-2 py-0.5 uppercase tracking-wider">Optional</span>
+              <span className="ml-1 text-[9px] font-semibold text-brand-orange border border-brand-orange/40 rounded-full px-2 py-0.5 uppercase tracking-wider">Required</span>
             </h3>
             <span className="text-[10px] text-slate-500">Supports PDF, PNG, or JPG (Max 5MB)</span>
           </div>

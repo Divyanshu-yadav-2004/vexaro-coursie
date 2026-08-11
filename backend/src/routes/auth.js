@@ -49,17 +49,38 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
+  const client = await pool.connect();
   try {
-    // Check for existing user
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    await client.query('BEGIN');
+
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanMobile = mobile ? String(mobile).replace(/\D/g, '') : null;
+
+    // Check for existing user by email OR mobile
+    let findQuery = 'SELECT id, email, mobile FROM users WHERE LOWER(email) = $1';
+    let findParams = [cleanEmail];
+    if (cleanMobile) {
+      findQuery += ' OR (mobile IS NOT NULL AND mobile = $2)';
+      findParams.push(cleanMobile);
+    }
+
+    const existing = await client.query(findQuery, findParams);
     if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'An account with this email already exists' });
+      await client.query('ROLLBACK');
+      const match = existing.rows[0];
+      if (cleanMobile && match.mobile === cleanMobile && match.email === cleanEmail) {
+        return res.status(409).json({ error: 'An account with this email and mobile number already exists. Please log in.' });
+      } else if (cleanMobile && match.mobile === cleanMobile) {
+        return res.status(409).json({ error: 'An account with this mobile number already exists. Please log in.' });
+      } else {
+        return res.status(409).json({ error: 'An account with this email address already exists. Please log in.' });
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const fullName = `${firstName} ${lastName}`.trim();
 
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO users
         (name, first_name, last_name, email, password_hash, mobile, role, gender,
          agency_name, address_line1, address_line2, city, state, pincode,
@@ -67,8 +88,8 @@ router.post('/register', async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,'user',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'not_started')
        RETURNING *`,
       [
-        fullName, firstName, lastName, email.toLowerCase(), passwordHash,
-        mobile || null, gender || 'male', agencyName || null,
+        fullName, firstName, lastName, cleanEmail, passwordHash,
+        cleanMobile || null, gender || 'male', agencyName || null,
         addressLine1 || null, addressLine2 || null,
         city || null, state || null, pincode || null,
         billingAddressLine1 || null, billingAddressLine2 || null,
@@ -76,17 +97,25 @@ router.post('/register', async (req, res) => {
       ]
     );
 
+    await client.query('COMMIT');
+
     const user = result.rows[0];
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'vexaro_super_secret_jwt_key_2026',
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
     res.status(201).json({ token, user: formatUser(user) });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Register error:', err);
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'An account with this email or mobile number already exists. Please log in.' });
+    }
     res.status(500).json({ error: 'Server error during registration' });
+  } finally {
+    client.release();
   }
 });
 
@@ -112,7 +141,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'vexaro_super_secret_jwt_key_2026',
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
@@ -172,7 +201,7 @@ router.post('/demo-login', async (req, res) => {
     const user = result.rows[0];
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'vexaro_super_secret_jwt_key_2026',
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 

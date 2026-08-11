@@ -691,6 +691,21 @@ function getUserByEmail(email) {
 
 async function createUser(userData) {
   const users = getUsers();
+  const cleanEmail = (userData.email || '').trim().toLowerCase();
+  const cleanMobile = (userData.mobile || '').replace(/\D/g, '');
+
+  // Check local duplicate by email or mobile first
+  const existingLocal = users.find(u => 
+    (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
+    (cleanMobile && u.mobile && u.mobile.replace(/\D/g, '') === cleanMobile)
+  );
+
+  if (existingLocal) {
+    const err = new Error('Account already exists. Please log in.');
+    err.status = 409;
+    throw err;
+  }
+
   const nameParts = (userData.name || '').trim().split(' ');
   const firstName = nameParts[0] || '';
   const lastName = nameParts.slice(1).join(' ') || '';
@@ -700,8 +715,8 @@ async function createUser(userData) {
     name: userData.name || '',
     firstName: firstName,
     lastName: lastName,
-    email: userData.email || '',
-    mobile: userData.mobile || '',
+    email: cleanEmail,
+    mobile: cleanMobile || (userData.mobile || ''),
     address: userData.address || '',
     city: userData.city || '',
     state: userData.state || '',
@@ -721,13 +736,22 @@ async function createUser(userData) {
     kycId: null,
     ...userData
   };
-  users.push(newUser);
-  saveUsers(users);
-  await syncPost('/user', newUser, { critical: false });
-  return newUser;
+
+  try {
+    const syncRes = await syncPost('/user', newUser, { critical: true });
+    if (syncRes && syncRes.data && syncRes.data.id) {
+      newUser.id = 'u' + syncRes.data.id;
+    }
+    users.push(newUser);
+    saveUsers(users);
+    return newUser;
+  } catch (syncErr) {
+    console.error('[createUser] Registration/Sync rejected:', syncErr.message);
+    throw syncErr;
+  }
 }
 
-async function updateUser(id, data) {
+async function updateUser(id, data, options = {}) {
   const users = getUsers();
   const idx = users.findIndex(u => idsMatch(u.id, id));
   if (idx === -1) return null;
@@ -740,7 +764,9 @@ async function updateUser(id, data) {
 
   users[idx] = { ...users[idx], ...data, updatedAt: Date.now() };
   saveUsers(users);
-  await syncPost('/user', users[idx], { critical: isAdminPage() });
+  if (options.sync !== false) {
+    await syncPost('/user', users[idx], { critical: options.critical === true || isAdminPage() });
+  }
   return users[idx];
 }
 
@@ -791,6 +817,7 @@ function getKYCById(id) {
 
 async function createKYC(kycData, options = {}) {
   const records = getKYCRecords();
+  const requireBackend = options.requireBackend === true;
   const newKYC = {
     id: generateId(),
     userId: kycData.userId,
@@ -811,6 +838,14 @@ async function createKYC(kycData, options = {}) {
   const user = getUserById(kycData.userId);
   if (!user || !user.email) {
     throw new Error('KYC submission cannot be saved because the user email is missing.');
+  }
+
+  if (requireBackend) {
+    await syncPost('/user', user, { critical: true });
+    await syncPost('/kyc', { ...newKYC, email: user.email }, { critical: true });
+    records.push(newKYC);
+    saveKYCRecords(records);
+    return newKYC;
   }
 
   // Always save to localStorage FIRST so the record is never lost,

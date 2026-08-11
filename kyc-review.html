@@ -347,13 +347,13 @@
               { step: 'Under Verification', completedAt: null, status: 'active' },
               { step: 'Verification Decision', completedAt: null, status: 'pending' }
             ]
-          });
+          }, { requireBackend: true });
 
           // Update User KYC profile links
           await updateUser(currentUser.id, {
             kycStatus: 'pending',
             kycId: kycRecord.id
-          });
+          }, { sync: false });
 
           // ── Stamp a session flag so user-profile.html always shows the correct
           //    pending state even if a background backend-sync races against us ──

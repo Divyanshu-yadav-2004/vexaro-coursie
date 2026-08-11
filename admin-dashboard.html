@@ -508,10 +508,8 @@
         const globalIndex = startIndex + index + 1;
         const subDate = item.kyc ? formatDateTime(item.kyc.submittedAt) : 'Not Submitted';
         
-        // Actions details link
-        const actionBtn = item.kyc 
-          ? `<button class="btn btn-outline-primary btn-sm" onclick="viewKYCDetails('${item.kyc.id}')">🔍 View Details</button>`
-          : `<span class="text-muted text-xs">No documents uploaded</span>`;
+        // Actions details link — view details for every user
+        const actionBtn = `<button class="btn btn-outline-primary btn-sm" onclick="viewKYCDetails('${item.user.id}')">🔍 View Details</button>`;
 
         html += `
           <tr class="fade-in" style="animation-delay: ${index * 0.05}s">
@@ -603,8 +601,8 @@
       applyFilters();
     }
 
-    function viewKYCDetails(kycId) {
-      window.location.href = getCleanUrl('admin-detail.html') + `?id=${kycId}`;
+    function viewKYCDetails(userOrKycId) {
+      window.location.href = getCleanUrl('admin-detail.html') + `?userId=${userOrKycId}&id=${userOrKycId}`;
     }
 
     function toggleExportMenu() {

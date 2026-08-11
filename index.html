@@ -643,7 +643,26 @@
   <script src="js/toast.js"></script>
 
   <script>
-    initStorage();
+    // ── Tab switcher ──
+    window.switchTab = function switchTab(role) {
+      ['user', 'admin'].forEach(r => {
+        const tab = document.getElementById('tab-' + r);
+        const pane = document.getElementById('pane-' + r);
+        if (tab) tab.classList.remove('active');
+        if (pane) pane.classList.remove('active');
+      });
+      const activeTab = document.getElementById('tab-' + role);
+      const activePane = document.getElementById('pane-' + role);
+      if (activeTab) activeTab.classList.add('active');
+      if (activePane) activePane.classList.add('active');
+    };
+    function switchTab(role) { window.switchTab(role); }
+
+    try {
+      if (typeof initStorage === 'function') initStorage();
+    } catch (e) {
+      console.warn('initStorage notice:', e.message);
+    }
 
     // Redirect if already logged in
     const currentSession = getSession();
@@ -653,18 +672,13 @@
         : 'user-profile.html';
     }
 
-    // ── Tab switcher ──
-    function switchTab(role) {
-      ['user', 'admin'].forEach(r => {
-        document.getElementById('tab-' + r).classList.remove('active');
-        document.getElementById('pane-' + r).classList.remove('active');
-      });
-      document.getElementById('tab-' + role).classList.add('active');
-      document.getElementById('pane-' + role).classList.add('active');
-    }
-
     // ── Pre-fill form for returning users on email blur ──
     window.addEventListener('DOMContentLoaded', () => {
+      const tabUser = document.getElementById('tab-user');
+      const tabAdmin = document.getElementById('tab-admin');
+      if (tabUser) tabUser.addEventListener('click', () => window.switchTab('user'));
+      if (tabAdmin) tabAdmin.addEventListener('click', () => window.switchTab('admin'));
+
       const emailInput = document.getElementById('user-email');
       emailInput.addEventListener('blur', () => {
         const email = emailInput.value.trim();
@@ -883,7 +897,10 @@
           window.location.href = 'user-profile.html';
         } catch (err) {
           console.error(err);
-          showToast('❌ Connection error. Please check if the backend is running.', 'error');
+          const msg = (err.message && (err.message.includes('already exists') || err.message.includes('Sync failed'))) 
+            ? 'Account already exists. Please log in.' 
+            : (err.message || 'Connection error. Please check backend.');
+          showToast('❌ ' + msg, 'error');
           btn.classList.remove('loading');
           btn.disabled = false;
         }

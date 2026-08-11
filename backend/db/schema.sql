@@ -16,7 +16,7 @@ CREATE TABLE users (
   last_name       VARCHAR(75),
   email           VARCHAR(255) UNIQUE NOT NULL,
   password_hash   VARCHAR(255) NOT NULL,
-  mobile          VARCHAR(20),
+  mobile          VARCHAR(20) UNIQUE,
   role            VARCHAR(20) NOT NULL DEFAULT 'user'
                   CHECK (role IN ('user', 'admin', 'owner')),
   gender          VARCHAR(10) DEFAULT 'male',
