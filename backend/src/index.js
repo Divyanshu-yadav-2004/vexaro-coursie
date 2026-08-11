@@ -9,6 +9,8 @@ const kycRoutes  = require('./routes/kyc');
 const userRoutes = require('./routes/users');
 const syncRoutes  = require('./routes/sync');
 const whatsappRoutes = require('./routes/whatsapp');
+const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const emailRoutes = !isProduction ? require('./routes/email') : null;
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -60,6 +62,11 @@ app.use('/api/kyc',   kycRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/sync',  syncRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+
+if (!isProduction) {
+  app.use('/api/dev/email', emailRoutes);
+  console.info('[index] development email test endpoint enabled at /api/dev/email/test');
+}
 
 // ─── Health Check ────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {

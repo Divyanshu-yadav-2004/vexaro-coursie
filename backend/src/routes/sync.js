@@ -301,7 +301,6 @@ function _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, rawSince,
     },
     finalSyncTimestamp: serverTime
   });
-
   const responsePayload = {
     success: true,
     syncType: isFullSync ? 'FULL' : 'INCREMENTAL',
@@ -311,18 +310,6 @@ function _buildAndSendSyncResponse(res, usersRes, kycRes, activityRes, rawSince,
     records,
     activities
   };
-
-  return res.json(responsePayload);
-}sers.length,
-    records: records.length,
-    activities: activities.length,
-    latestRecord: records[0] ? {
-      id: records[0].id,
-      userId: records[0].userId,
-      status: records[0].status,
-      submittedAt: records[0].submittedAt
-    } : null
-  });
 
   return res.json(responsePayload);
 }

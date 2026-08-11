@@ -606,6 +606,42 @@ async function sendEmail({ to, subject, html }) {
   }
 }
 
+function buildSystemTestHtml(toEmail) {
+  return baseLayout({
+    preheader: 'Vexaro email system test',
+    headerSubtitle: 'Email System Test',
+    body: `
+      <p style="margin:0 0 18px;font-size:16px;color:${BRAND.text};font-weight:600;">Hello,</p>
+      <p style="margin:0 0 18px;font-size:14px;color:${BRAND.textMuted};line-height:1.7;">
+        This is a one-time email system test from Vexaro Courier Solution Private Limited. It confirms the configured SMTP credentials and email delivery pipeline.
+      </p>
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:${BRAND.infoBg};border:1px solid ${BRAND.border};border-radius:12px;padding:18px;margin-bottom:24px;">
+        <tr>
+          <td style="font-size:14px;color:${BRAND.text};line-height:1.7;">
+            <strong>Recipient:</strong><br>${toEmail}
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0 0 18px;font-size:14px;color:${BRAND.textMuted};line-height:1.7;">
+        If you receive this email, the SMTP configuration is working correctly.
+      </p>
+      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};line-height:1.7;">Regards,<br/>Vexaro Team</p>
+    `,
+  });
+}
+
+async function sendSystemTestEmail(toEmail) {
+  if (!toEmail) {
+    return { sent: false, skipped: true, reason: 'missing_recipient' };
+  }
+
+  return sendEmail({
+    to: toEmail,
+    subject: 'Vexaro - Email System Test',
+    html: buildSystemTestHtml(toEmail),
+  });
+}
+
 // ─── Public API ───────────────────────────────────────────────
 
 /**
@@ -670,6 +706,7 @@ module.exports = {
   sendKycSubmittedEmail,
   sendKycApprovedEmail,
   sendKycRejectedEmail,
+  sendSystemTestEmail,
   // Exposed for preview endpoint / unit tests
   buildKycSubmittedHtml,
   buildKycApprovedHtml,
