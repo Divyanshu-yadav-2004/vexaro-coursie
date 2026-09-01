@@ -100,64 +100,93 @@ router.get('/preview', prodAuthGuard, (req, res) => {
 });
 
 // ─── POST /api/email/test ─────────────────────────────────────
-// Send a test email to specified recipient (defaults to vexarocouriersolution@gmail.com)
+// Send a test email or trigger an email notification to specified recipient
 router.post('/test', prodAuthGuard, async (req, res) => {
-  const toEmail = String(req.body?.email || 'vexarocouriersolution@gmail.com').trim();
+  const toEmail = String(req.body?.email || '').trim();
   const templateType = String(req.body?.type || 'welcome').toLowerCase();
+  const recipientName = String(req.body?.name || 'Customer').trim();
 
-  if (!isValidEmail(toEmail)) {
-    return res.status(400).json({ error: 'A valid recipient email address is required in the "email" field.' });
-  }
-
-  const sampleUser = {
-    name: 'Test User',
-    userId: 99,
-    email: toEmail,
-    submittedAt: new Date(),
-    reviewedAt: new Date(),
-    rejectionReason: 'Sample rejection reason for testing purposes.',
-  };
-
-  let result;
-  switch (templateType) {
-    case 'welcome':
-      result = await sendWelcomeEmail(sampleUser);
-      break;
-    case 'submitted':
-      result = await sendKycSubmittedEmail(sampleUser);
-      break;
-    case 'approved':
-      result = await sendKycApprovedEmail(sampleUser);
-      break;
-    case 'rejected':
-      result = await sendKycRejectedEmail(sampleUser);
-      break;
-    case 'password_reset':
-      result = await sendPasswordResetEmail(sampleUser, 'https://vexaro.co.in/reset-password.html?token=test', 60);
-      break;
-    case 'security':
-      result = await sendSecurityNotificationEmail(sampleUser, {
-        event: 'Test Security Alert',
-        eventTime: new Date(),
-        deviceInfo: 'Chrome Test Client',
-      });
-      break;
-    default:
-      result = await sendSystemTestEmail(toEmail);
-      break;
-  }
-
-  if (!result.sent) {
-    return res.status(500).json({
-      error: 'Failed to send test email.',
-      details: result,
+  if (!toEmail) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email address is required',
+      error: 'Missing recipient email address in request body'
     });
   }
 
-  return res.status(200).json({
-    message: `Test email (${templateType}) sent successfully to ${toEmail}.`,
-    messageId: result.messageId,
-  });
+  if (!isValidEmail(toEmail)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid email address',
+      error: `"${toEmail}" is not a valid email address format.`
+    });
+  }
+
+  const sampleUser = {
+    name: recipientName,
+    userId: req.body?.userId || 99,
+    email: toEmail,
+    submittedAt: new Date(),
+    reviewedAt: new Date(),
+    rejectionReason: req.body?.rejectionReason || 'Sample document verification issue.',
+  };
+
+  try {
+    let result;
+    switch (templateType) {
+      case 'welcome':
+        result = await sendWelcomeEmail(sampleUser);
+        break;
+      case 'submitted':
+        result = await sendKycSubmittedEmail(sampleUser);
+        break;
+      case 'approved':
+        result = await sendKycApprovedEmail(sampleUser);
+        break;
+      case 'rejected':
+      case 'action_required':
+        result = await sendKycRejectedEmail(sampleUser);
+        break;
+      case 'password_reset':
+      case 'reset':
+        result = await sendPasswordResetEmail(sampleUser, 'https://vexaro.co.in/reset-password.html?token=test', 60);
+        break;
+      case 'security':
+      case 'login':
+        result = await sendSecurityNotificationEmail(sampleUser, {
+          event: 'Security Notification Test',
+          eventTime: new Date(),
+          deviceInfo: 'Vexaro Admin Portal',
+        });
+        break;
+      default:
+        result = await sendSystemTestEmail(toEmail);
+        break;
+    }
+
+    if (!result || !result.sent) {
+      const errorMsg = result?.error || result?.reason || 'SMTP delivery failed or was skipped due to missing configuration.';
+      return res.status(500).json({
+        success: false,
+        message: 'Email could not be sent',
+        error: errorMsg,
+        details: result
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Email (${templateType}) sent successfully to ${toEmail}`,
+      messageId: result.messageId,
+    });
+  } catch (err) {
+    console.error('[email:test] Error in email test handler:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Email could not be sent',
+      error: err.message || 'Internal server error while sending email'
+    });
+  }
 });
 
 module.exports = router;

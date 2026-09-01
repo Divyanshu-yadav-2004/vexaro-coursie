@@ -423,4 +423,39 @@ router.get('/email-preview', (req, res) => {
   res.send(html);
 });
 
+// ─── DELETE /api/kyc/:id ──────────────────────────────────────
+// Admin/owner: delete a KYC record and reset user kyc_status
+router.delete('/:id', authMiddleware, roleGuard('admin', 'owner'), async (req, res) => {
+  const { id } = req.params;
+  const kycId = parseInt(id, 10) || id;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT id, user_id FROM kyc_records WHERE id = $1', [kycId]);
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'KYC record not found' });
+    }
+
+    const userId = existing.rows[0].user_id;
+
+    // Delete KYC record
+    await client.query('DELETE FROM kyc_records WHERE id = $1', [kycId]);
+
+    // Reset user kyc_status to not_started
+    await client.query("UPDATE users SET kyc_status = 'not_started' WHERE id = $1", [userId]);
+
+    await client.query('COMMIT');
+    console.log(`[kyc:delete] KYC record ${kycId} (user: ${userId}) deleted by admin ${req.user.email || req.user.id}`);
+    res.json({ message: 'KYC record deleted successfully', deletedId: kycId, userId });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[kyc:delete] Error:', err);
+    res.status(500).json({ error: 'Failed to delete KYC record: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

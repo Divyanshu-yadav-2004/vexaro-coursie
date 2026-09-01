@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ShieldCheck, UserCheck, AlertTriangle, FileText, CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ShieldAlert, Check, X, Shield, RefreshCw } from 'lucide-react';
-import { getAllUsers, getAllKYC, updateKYCStatus, redactEmail, redactMobile, redactPincode } from '../utils/api';
+import { Search, Filter, ShieldCheck, UserCheck, AlertTriangle, FileText, CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ShieldAlert, Check, X, Shield, RefreshCw, Trash2, Mail } from 'lucide-react';
+import { getAllUsers, getAllKYC, updateKYCStatus, deleteUser, sendTestEmail, redactEmail, redactMobile, redactPincode } from '../utils/api';
 
 export default function AdminDashboard({ currentUser, onLogout }) {
   const [users, setUsers] = useState([]);
@@ -13,6 +13,9 @@ export default function AdminDashboard({ currentUser, onLogout }) {
   const [auditLogs, setAuditLogs] = useState([]);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);   // { id, name, email }
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
 
   // Load database on mount
   useEffect(() => {
@@ -181,6 +184,69 @@ export default function AdminDashboard({ currentUser, onLogout }) {
     }
   };
 
+  const handleDeleteUser = async () => {
+    if (!deleteTarget || deleteLoading) return;
+    setDeleteLoading(true);
+    try {
+      await deleteUser(deleteTarget.id);
+      setUsers(prev => prev.filter(u => String(u.id) !== String(deleteTarget.id)));
+      setRecords(prev => prev.filter(r => String(r.userId) !== String(deleteTarget.id) && String(r.user?.id) !== String(deleteTarget.id)));
+      if (selectedClient && String(selectedClient.id) === String(deleteTarget.id)) {
+        setSelectedClient(null);
+        setSelectedRecord(null);
+      }
+      setAuditLogs(prev => [{
+        timestamp: new Date().toLocaleTimeString(),
+        actor: currentUser.email,
+        action: `USER DELETED: ${deleteTarget.name} (${deleteTarget.email})`,
+        level: 'CRITICAL'
+      }, ...prev]);
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error('Delete failed:', err);
+      setAuditLogs(prev => [{
+        timestamp: new Date().toLocaleTimeString(),
+        actor: currentUser.email,
+        action: `DELETE FAILED: ${err.message || 'Unknown error'}`,
+        level: 'CRITICAL'
+      }, ...prev]);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!selectedClient || emailLoading) return;
+    const email = selectedClient.email;
+    if (!email) return;
+
+    const kycStatus = selectedClient.kycStatus;
+    let emailType = 'welcome';
+    if (kycStatus === 'approved') emailType = 'approved';
+    else if (kycStatus === 'rejected') emailType = 'rejected';
+    else if (kycStatus === 'pending') emailType = 'submitted';
+
+    setEmailLoading(true);
+    try {
+      const result = await sendTestEmail(email, emailType, { name: selectedClient.name, userId: selectedClient.id });
+      setAuditLogs(prev => [{
+        timestamp: new Date().toLocaleTimeString(),
+        actor: currentUser.email,
+        action: `EMAIL SENT: ${emailType.toUpperCase()} notification delivered to ${email} (msgId: ${result.messageId || 'n/a'})`,
+        level: 'INFO'
+      }, ...prev]);
+    } catch (err) {
+      setAuditLogs(prev => [{
+        timestamp: new Date().toLocaleTimeString(),
+        actor: currentUser.email,
+        action: `EMAIL FAILED: Could not send ${emailType} email to ${email}: ${err.message || 'Unknown error'}`,
+        level: 'CRITICAL'
+      }, ...prev]);
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6 animate-fadeIn px-4">
       
@@ -332,13 +398,24 @@ export default function AdminDashboard({ currentUser, onLogout }) {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => handleOpenDetails(client)}
-                          className="inline-flex items-center gap-1 bg-slate-900 hover:bg-slate-800 hover:text-brand-orange border border-slate-800 text-slate-300 px-3 py-1.5 rounded-lg transition-all"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          Review Desk
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleOpenDetails(client)}
+                            className="inline-flex items-center gap-1 bg-slate-900 hover:bg-slate-800 hover:text-brand-orange border border-slate-800 text-slate-300 px-3 py-1.5 rounded-lg transition-all"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Review
+                          </button>
+                          {String(client.id) !== String(currentUser.id) && (
+                            <button
+                              onClick={() => setDeleteTarget({ id: client.id, name: client.name || client.email, email: client.email })}
+                              className="inline-flex items-center gap-1 bg-red-950/40 hover:bg-red-900/60 border border-red-800 text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg transition-all"
+                              title="Delete customer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -686,24 +763,105 @@ export default function AdminDashboard({ currentUser, onLogout }) {
 
             {/* Modal Footer Controls */}
             {selectedClient.kycStatus === 'pending' && !showRejectForm && (
-              <div className="bg-slate-950 p-4 border-t border-slate-850 flex justify-end gap-3 sticky bottom-0 z-15">
+              <div className="bg-slate-950 p-4 border-t border-slate-850 flex justify-between gap-3 sticky bottom-0 z-15">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSendEmail}
+                    disabled={emailLoading}
+                    className="inline-flex items-center gap-1.5 bg-blue-950/40 text-blue-400 border border-blue-800 hover:bg-blue-950/70 text-xs font-bold px-4 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    {emailLoading ? 'Sending...' : 'Send Email'}
+                  </button>
+                  {String(selectedClient.id) !== String(currentUser.id) && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget({ id: selectedClient.id, name: selectedClient.name || selectedClient.email, email: selectedClient.email })}
+                      className="inline-flex items-center gap-1.5 bg-red-950/30 text-red-400 border border-red-800 hover:bg-red-950/60 text-xs font-bold px-4 py-2.5 rounded-xl transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRejectForm(true)}
+                    className="bg-red-950/40 text-red-400 border border-red-800 hover:bg-red-950/70 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
+                  >
+                    Reject Application
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApprove}
+                    className="bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-brand-orange/20"
+                  >
+                    Approve Application
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Email/Delete buttons for non-pending states */}
+            {selectedClient.kycStatus !== 'pending' && !showRejectForm && (
+              <div className="bg-slate-950 p-4 border-t border-slate-850 flex gap-2 sticky bottom-0 z-15">
                 <button
                   type="button"
-                  onClick={() => setShowRejectForm(true)}
-                  className="bg-red-950/40 text-red-400 border border-red-800 hover:bg-red-950/70 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
+                  onClick={handleSendEmail}
+                  disabled={emailLoading}
+                  className="inline-flex items-center gap-1.5 bg-blue-950/40 text-blue-400 border border-blue-800 hover:bg-blue-950/70 text-xs font-bold px-4 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Reject Application
+                  <Mail className="w-3.5 h-3.5" />
+                  {emailLoading ? 'Sending...' : 'Send Email'}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleApprove}
-                  className="bg-brand-orange hover:bg-brand-orangeHover text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-brand-orange/20"
-                >
-                  Approve Application
-                </button>
+                {String(selectedClient.id) !== String(currentUser.id) && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget({ id: selectedClient.id, name: selectedClient.name || selectedClient.email, email: selectedClient.email })}
+                    className="inline-flex items-center gap-1.5 bg-red-950/30 text-red-400 border border-red-800 hover:bg-red-950/60 text-xs font-bold px-4 py-2.5 rounded-xl transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete Customer
+                  </button>
+                )}
               </div>
             )}
             
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center">
+            <div className="text-5xl mb-4">⚠️</div>
+            <h2 className="text-lg font-bold text-slate-100 mb-2">Delete Customer?</h2>
+            <p className="text-slate-400 text-sm mb-1">You are about to permanently delete:</p>
+            <p className="text-red-400 font-bold text-base mb-1">{deleteTarget.name}</p>
+            <p className="text-slate-500 text-xs mb-5">{deleteTarget.email}</p>
+            <p className="text-slate-400 text-xs mb-6">
+              This will permanently delete the user, their KYC records, and all activity logs.{' '}
+              <strong className="text-slate-300">This cannot be undone.</strong>
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading}
+                className="px-6 py-2.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl text-sm font-semibold hover:bg-slate-700 transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={deleteLoading}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleteLoading ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

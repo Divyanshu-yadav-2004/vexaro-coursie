@@ -454,6 +454,10 @@
               📤 Request Document Resubmission
             </button>
           </div>
+          <div style="border-top:1px solid rgba(0,0,0,0.1);margin-top:16px;padding-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+            <button onclick="triggerSendEmail(this)" style="padding:8px 16px;border-radius:8px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;font-size:13px;font-weight:600;">📧 Send Notification Email</button>
+            <button onclick="confirmDeleteCurrentUser(this)" style="padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">🗑️ Delete Customer</button>
+          </div>
         `;
         return;
       }
@@ -482,6 +486,11 @@
               <button class="btn btn-danger btn-sm" onclick="confirmRejectionRequest()">Confirm Rejection</button>
             </div>
           </div>
+
+          <div style="border-top:1px solid rgba(0,0,0,0.1);margin-top:16px;padding-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+            <button onclick="triggerSendEmail(this)" style="padding:8px 16px;border-radius:8px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;font-size:13px;font-weight:600;">📧 Send Notification Email</button>
+            <button onclick="confirmDeleteCurrentUser(this)" style="padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">🗑️ Delete Customer</button>
+          </div>
         `;
       } else if (status === 'approved') {
         box.className = 'card p-6 alert-success';
@@ -491,6 +500,10 @@
           <p class="text-sm">Verified on: <strong>${formatDateTime(currentKYC.approvedOn || currentKYC.reviewedAt || currentKYC.reviewed_at)}</strong></p>
           <div class="flex gap-3 mt-4">
             <button class="btn btn-outline btn-sm" onclick="revertToPending()">🔄 Revert to Pending Verification</button>
+          </div>
+          <div style="border-top:1px solid rgba(0,0,0,0.1);margin-top:16px;padding-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+            <button onclick="triggerSendEmail(this)" style="padding:8px 16px;border-radius:8px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;font-size:13px;font-weight:600;">📧 Send Notification Email</button>
+            <button onclick="confirmDeleteCurrentUser(this)" style="padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">🗑️ Delete Customer</button>
           </div>
         `;
       } else if (status === 'rejected') {
@@ -505,6 +518,10 @@
           </div>
           <div class="flex gap-3 mt-4">
             <button class="btn btn-outline btn-sm" onclick="revertToPending()">🔄 Revert to Pending Verification</button>
+          </div>
+          <div style="border-top:1px solid rgba(0,0,0,0.1);margin-top:16px;padding-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+            <button onclick="triggerSendEmail(this)" style="padding:8px 16px;border-radius:8px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;font-size:13px;font-weight:600;">📧 Send Notification Email</button>
+            <button onclick="confirmDeleteCurrentUser(this)" style="padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">🗑️ Delete Customer</button>
           </div>
         `;
       }
@@ -842,6 +859,100 @@
         showToast(`❌ Failed to request resubmission: ${err.message || 'Connection error'}`, 'error');
       }
     }
+
+    // ─── Delete Customer ────────────────────────────────────────
+    let _detailDeleteInProgress = false;
+
+    function confirmDeleteCurrentUser(btn) {
+      if (_detailDeleteInProgress || !targetUser) return;
+      const modal = document.getElementById('detail-delete-modal');
+      const name = getDisplayName();
+      document.getElementById('detail-delete-name').textContent = name;
+      document.getElementById('detail-delete-email').textContent = targetUser.email || '—';
+      modal.style.display = 'flex';
+      modal._btn = btn;
+    }
+
+    function closeDetailDeleteModal() {
+      document.getElementById('detail-delete-modal').style.display = 'none';
+    }
+
+    async function executeDetailDeleteUser() {
+      if (_detailDeleteInProgress || !targetUser) return;
+      _detailDeleteInProgress = true;
+
+      const confirmBtn = document.getElementById('detail-delete-confirm-btn');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Deleting...';
+      closeDetailDeleteModal();
+
+      try {
+        await deleteUser(targetUser.id);
+        showToast('✅ Customer deleted successfully. Redirecting...', 'success');
+        setTimeout(() => { window.location.href = getCleanUrl('admin-dashboard.html'); }, 1500);
+      } catch (err) {
+        showToast('❌ Failed to delete customer: ' + (err.message || 'Unknown error'), 'error');
+        _detailDeleteInProgress = false;
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Yes, Delete';
+      }
+    }
+
+    // ─── Send Notification Email ────────────────────────────────
+    let _emailInProgress = false;
+
+    async function triggerSendEmail(btn) {
+      if (_emailInProgress || !targetUser) return;
+      const email = targetUser.email;
+      if (!email) {
+        showToast('❌ No email address found for this customer.', 'error');
+        return;
+      }
+
+      const kycStatus = currentKYC ? (currentKYC.status || currentKYC.kyc_status || 'pending') : null;
+      let emailType = 'welcome';
+      if (kycStatus === 'approved') emailType = 'approved';
+      else if (kycStatus === 'rejected') emailType = 'rejected';
+      else if (kycStatus === 'pending') emailType = 'submitted';
+
+      _emailInProgress = true;
+      const origText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ Sending...';
+
+      try {
+        const result = await sendTestEmail(email, emailType, {
+          name: getDisplayName(),
+          userId: targetUser.id,
+          rejectionReason: currentKYC?.rejectionReason || currentKYC?.rejection_reason || ''
+        });
+        showToast(`✅ Email sent successfully to ${email}`, 'success');
+        console.log('[admin-detail] Email sent:', result);
+      } catch (err) {
+        showToast(`❌ Email failed: ${err.message || 'Unknown error'}`, 'error');
+        console.error('[admin-detail] Email error:', err);
+      } finally {
+        _emailInProgress = false;
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
+    }
   </script>
+
+  <!-- Delete Customer Modal -->
+  <div id="detail-delete-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg,#fff);border-radius:14px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);text-align:center;">
+      <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
+      <h2 style="margin:0 0 8px;font-size:1.25rem;color:var(--text-primary,#111);">Delete Customer?</h2>
+      <p style="color:var(--text-muted,#666);margin:0 0 6px;font-size:0.9rem;">You are about to permanently delete:</p>
+      <p style="font-weight:700;color:#ef4444;font-size:1.05rem;margin:0 0 4px;" id="detail-delete-name">—</p>
+      <p style="color:var(--text-muted,#888);font-size:0.82rem;margin:0 0 20px;" id="detail-delete-email">—</p>
+      <p style="color:var(--text-muted,#666);font-size:0.85rem;margin:0 0 24px;">This will permanently delete the user, their KYC records, and all activity logs. <strong>This cannot be undone.</strong></p>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button onclick="closeDetailDeleteModal()" style="padding:10px 24px;border-radius:8px;border:1px solid var(--border-color,#ddd);background:transparent;cursor:pointer;font-size:0.95rem;color:var(--text-primary,#333);">Cancel</button>
+        <button id="detail-delete-confirm-btn" onclick="executeDetailDeleteUser()" style="padding:10px 24px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-weight:600;font-size:0.95rem;">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

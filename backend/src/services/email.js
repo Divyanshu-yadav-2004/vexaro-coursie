@@ -1,4 +1,5 @@
 'use strict';
+require('dotenv').config();
 /**
  * email.js — Vexaro KYC Professional Email Notification Service
  *
@@ -88,7 +89,13 @@ function createTransporter() {
   const secureStr = process.env.SMTP_SECURE || process.env.EMAIL_SECURE;
   const secure = secureStr !== undefined ? secureStr !== 'false' : port === 465;
 
-  if (!host || !user || !pass) {
+  const missing = [];
+  if (!host) missing.push('SMTP_HOST/EMAIL_HOST');
+  if (!user) missing.push('SMTP_USER/EMAIL_USER');
+  if (!pass) missing.push('SMTP_PASSWORD/SMTP_PASS/EMAIL_PASS');
+
+  if (missing.length > 0) {
+    console.error(`[EMAIL ERROR] SMTP transporter setup failed: Missing environment variable(s): ${missing.join(', ')}`);
     return null;
   }
 
@@ -798,17 +805,38 @@ function buildSystemTestHtml(toEmail) {
 }
 
 // ─── Core send helper ─────────────────────────────────────────
-async function sendEmail({ to, subject, html, dedupeKey = null }) {
+function extractUserName(user) {
+  if (!user) return 'Applicant';
+  if (user.name && typeof user.name === 'string' && user.name.trim()) return user.name.trim();
+  const first = user.firstName || user.first_name || '';
+  const last = user.lastName || user.last_name || '';
+  const combined = `${first} ${last}`.trim();
+  if (combined) return combined;
+  return user.email || 'Applicant';
+}
+
+async function sendEmail({ to, subject, html, dedupeKey = null, emailType = 'welcome email' }) {
+  if (!to || typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim())) {
+    const errorMsg = `Invalid recipient email address "${to}"`;
+    console.error(`[EMAIL ERROR] ${emailType === 'welcome email' ? 'Welcome email' : emailType} failed: ${errorMsg}`);
+    return { sent: false, skipped: true, error: errorMsg, reason: 'invalid_email' };
+  }
+
+  console.log(`[EMAIL] Attempting ${emailType} to: ${to}`);
+
   if (dedupeKey && isDuplicate(dedupeKey)) {
-    console.info('[email] deduplicated — suppressed repeat send', { to, subject, dedupeKey });
+    console.info(`[EMAIL] Deduplicated — suppressed repeat send to ${to} (${dedupeKey})`);
     return { sent: false, skipped: true, reason: 'deduplicated' };
   }
 
   const transporter = createTransporter();
   if (!transporter) {
-    console.warn('[email] skipped — SMTP credentials not configured in environment');
+    console.error(`[EMAIL ERROR] ${emailType === 'welcome email' ? 'Welcome email' : emailType} failed for ${to}`);
+    console.error('[EMAIL ERROR] SMTP credentials not configured in environment');
     return { sent: false, skipped: true, reason: 'email_not_configured' };
   }
+
+  console.log('[EMAIL] SMTP transporter ready');
 
   const mailOptions = {
     from: getFromAddress(),
@@ -829,42 +857,55 @@ async function sendEmail({ to, subject, html, dedupeKey = null }) {
     attempts++;
     try {
       const info = await transporter.sendMail(mailOptions);
-      console.info('[email] sent ✓', { to, subject, messageId: info.messageId, attempt: attempts });
+      if (emailType === 'welcome email') {
+        console.log(`[EMAIL] Welcome email sent successfully: ${info.messageId}`);
+      } else {
+        console.log(`[EMAIL] ${emailType.charAt(0).toUpperCase() + emailType.slice(1)} sent successfully: ${info.messageId}`);
+      }
       return { sent: true, skipped: false, messageId: info.messageId };
     } catch (err) {
       lastError = err;
-      console.warn(`[email] send attempt ${attempts} failed for ${to}: ${err.message}`);
+      console.error(`[EMAIL ERROR] Send attempt ${attempts} failed for ${to}: ${err.message}`);
       if (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 1000));
       }
     }
   }
 
-  console.error('[email] delivery failed after max attempts', { to, subject, error: lastError?.message });
+  if (emailType === 'welcome email') {
+    console.error(`[EMAIL ERROR] Welcome email failed for ${to}`);
+  } else {
+    console.error(`[EMAIL ERROR] ${emailType.charAt(0).toUpperCase() + emailType.slice(1)} failed for ${to}`);
+  }
+  console.error(`[EMAIL ERROR] ${lastError?.message || 'SMTP delivery failed'}`);
   return { sent: false, skipped: false, error: lastError?.message || 'SMTP delivery failed' };
 }
 
 // ─── Public send functions ────────────────────────────────────
 
 async function sendWelcomeEmail(user) {
-  if (!user?.email) return { sent: false, skipped: true, reason: 'missing_email' };
-  const userId = user.id || user.userId;
-  const name = user.name || [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+  if (!user?.email) {
+    console.error('[EMAIL ERROR] Welcome email failed: Recipient email address missing');
+    return { sent: false, skipped: true, reason: 'missing_email' };
+  }
+  const userId = user.id || user.userId || user.user_id;
+  const name = extractUserName(user);
   const html = buildWelcomeHtml({ name, userId });
   return sendEmail({
     to: user.email,
     subject: `Welcome to Vexaro — Your Account Has Been Created`,
     html,
-    dedupeKey: `welcome:${userId}:${user.email}`,
+    dedupeKey: userId ? `welcome:${userId}:${user.email}` : null,
+    emailType: 'welcome email',
   });
 }
 
 async function sendKycSubmittedEmail(user) {
   if (!user?.email) return { sent: false, skipped: true, reason: 'missing_email' };
-  const userId = user.id || user.userId;
+  const userId = user.id || user.userId || user.user_id;
   // Use kycId (application ID) for dedupe when available — avoids blocking resubmissions
   const kycId = user.kycId || user.kyc_id || null;
-  const name = user.name || [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+  const name = extractUserName(user);
   const html = buildKycSubmittedHtml({ name, userId, submittedAt: user.submittedAt || new Date() });
   const dedupeKey = kycId
     ? `kyc-submitted:${kycId}`
@@ -874,15 +915,16 @@ async function sendKycSubmittedEmail(user) {
     subject: `Vexaro KYC Submission Confirmed — Application ${formatAppId(userId)}`,
     html,
     dedupeKey,
+    emailType: 'KYC submitted email',
   });
 }
 
 async function sendKycApprovedEmail(user) {
   if (!user?.email) return { sent: false, skipped: true, reason: 'missing_email' };
-  const userId = user.id || user.userId;
+  const userId = user.id || user.userId || user.user_id;
   // Dedupe by kycId (application ID) — prevents double-email for same approval
   const kycId = user.kycId || user.kyc_id || null;
-  const name = user.name || [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+  const name = extractUserName(user);
   const html = buildKycApprovedHtml({
     name, userId,
     submittedAt: user.submittedAt,
@@ -896,15 +938,16 @@ async function sendKycApprovedEmail(user) {
     subject: `Vexaro KYC Approved — Application ${formatAppId(userId)}`,
     html,
     dedupeKey,
+    emailType: 'KYC approved email',
   });
 }
 
 async function sendKycRejectedEmail(user) {
   if (!user?.email) return { sent: false, skipped: true, reason: 'missing_email' };
-  const userId = user.id || user.userId;
+  const userId = user.id || user.userId || user.user_id;
   // Dedupe by kycId — each rejection decision has its own application ID
   const kycId = user.kycId || user.kyc_id || null;
-  const name = user.name || [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+  const name = extractUserName(user);
   const html = buildKycRejectedHtml({
     name, userId,
     submittedAt: user.submittedAt,
@@ -919,24 +962,26 @@ async function sendKycRejectedEmail(user) {
     subject: `Action Required — Update Your Vexaro KYC — Application ${formatAppId(userId)}`,
     html,
     dedupeKey,
+    emailType: 'KYC rejection email',
   });
 }
 
 async function sendPasswordResetEmail(user, resetUrl, expiresInMinutes = 60) {
   if (!user?.email) return { sent: false, skipped: true, reason: 'missing_email' };
-  const name = user.name || [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+  const name = extractUserName(user);
   const html = buildPasswordResetHtml({ name, resetUrl, expiresInMinutes });
   return sendEmail({
     to: user.email,
     subject: `Reset Your Vexaro Password`,
     html,
     dedupeKey: `pwd-reset:${user.email}:${Math.floor(Date.now() / 60000)}`,
+    emailType: 'password reset email',
   });
 }
 
 async function sendSecurityNotificationEmail(user, eventDetails = {}) {
   if (!user?.email) return { sent: false, skipped: true, reason: 'missing_email' };
-  const name = user.name || [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+  const name = extractUserName(user);
   const eventLabel = eventDetails.event || 'Account Login';
   const html = buildSecurityNotificationHtml({
     name,
@@ -950,6 +995,7 @@ async function sendSecurityNotificationEmail(user, eventDetails = {}) {
     subject: `Vexaro Security Notification — ${eventLabel}`,
     html,
     dedupeKey: `security:${user.email}:${eventLabel}:${Math.floor(Date.now() / 30000)}`,
+    emailType: 'security notification email',
   });
 }
 
@@ -965,6 +1011,7 @@ async function sendSystemTestEmail(toEmail) {
 // ─── Module exports ───────────────────────────────────────────
 module.exports = {
   // Send functions
+  sendEmail,
   sendWelcomeEmail,
   sendKycSubmittedEmail,
   sendKycApprovedEmail,

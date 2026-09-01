@@ -15,8 +15,8 @@ function getBackendApiBase() {
   const explicitConfig = window.VEXARO_API_BASE;
   if (explicitConfig) return explicitConfig.replace(/\/$/, '');
 
-  // 2. Local dev — always hit the local Express server
-  const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  // 2. Local dev or file:// protocol — hit the local Express server
+  const isLocalHost = ['localhost', '127.0.0.1', '', '::1'].includes(window.location.hostname) || window.location.protocol === 'file:';
   if (isLocalHost) return 'http://localhost:5000/api';
 
   // 3. Production — use the Railway backend URL directly
@@ -190,7 +190,18 @@ async function syncPost(endpoint, payload, options = {}) {
     if (!isAdminPage()) processOfflineQueue();
     return data;
   } catch (err) {
-    if (critical || isAdminPage()) throw err;
+    const isNetworkError = err instanceof TypeError || (err.message && (
+      err.message.includes('Failed to fetch') ||
+      err.message.includes('NetworkError') ||
+      err.message.includes('Network Error') ||
+      err.message.includes('LOAD_FAILED')
+    ));
+
+    if (!isNetworkError && (critical || isAdminPage())) {
+      throw err;
+    }
+
+    console.warn(`[syncPost] Sync attempt failed (${err.message}). Queuing payload for retry.`, { endpoint, critical });
     let queue = [];
     try { queue = JSON.parse(localStorage.getItem('kyc_offline_queue')) || []; } catch {}
     
@@ -249,7 +260,7 @@ async function syncPost(endpoint, payload, options = {}) {
       }
     }
     showOfflineBanner(true);
-    return null;
+    return { success: true, offline: true };
   }
 }
 
@@ -388,8 +399,8 @@ async function syncDelete(endpoint, payload) {
     }
     return data;
   } catch (err) {
-    console.error('Backend delete failed:', err.message);
-    throw err;
+    console.warn('[syncDelete] Backend delete sync failed:', err.message);
+    return { success: false, error: err.message };
   }
 }
 
@@ -774,8 +785,37 @@ async function deleteUser(id) {
   const user = getUserById(id);
   const users = getUsers().filter(u => !idsMatch(u.id, id));
   saveUsers(users);
-  if (user?.email) {
-    await syncDelete('/user', { email: user.email });
+
+  // Update admin cache if present
+  if (typeof adminDataCache !== 'undefined' && adminDataCache) {
+    if (Array.isArray(adminDataCache.users)) {
+      adminDataCache.users = adminDataCache.users.filter(u => !idsMatch(u.id, id));
+    }
+    if (Array.isArray(adminDataCache.records)) {
+      adminDataCache.records = adminDataCache.records.filter(k => !idsMatch(k.userId, id));
+    }
+  }
+
+  // Attempt backend API route delete first (/api/users/:id), fall back to syncDelete
+  try {
+    const isNumericId = typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
+    if (isNumericId) {
+      const token = localStorage.getItem('vexaro_token');
+      const res = await fetch(`${getBackendApiBase()}/users/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      if (res.ok) return;
+    }
+  } catch (apiErr) {
+    console.warn('[deleteUser] /api/users/:id fetch error, attempting sync delete:', apiErr.message);
+  }
+
+  if (user?.email || id) {
+    await syncDelete('/user', { email: user?.email, id });
   }
 }
 
@@ -887,9 +927,55 @@ async function deleteKYC(id) {
   const record = getKYCById(id);
   const user = record ? getUserById(record.userId) : null;
   saveKYCRecords(getKYCRecords().filter(k => !idsMatch(k.id, id)));
-  if (user?.email) {
-    await syncDelete('/kyc', { email: user.email });
+
+  if (typeof adminDataCache !== 'undefined' && adminDataCache && Array.isArray(adminDataCache.records)) {
+    adminDataCache.records = adminDataCache.records.filter(k => !idsMatch(k.id, id));
   }
+
+  try {
+    const isNumericId = typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
+    if (isNumericId) {
+      const token = localStorage.getItem('vexaro_token');
+      const res = await fetch(`${getBackendApiBase()}/kyc/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      if (res.ok) return;
+    }
+  } catch (apiErr) {
+    console.warn('[deleteKYC] /api/kyc/:id fetch error, attempting sync delete:', apiErr.message);
+  }
+
+  if (user?.email || id) {
+    await syncDelete('/kyc', { email: user?.email, id });
+  }
+}
+
+async function sendTestEmail(email, type = 'welcome', options = {}) {
+  const token = localStorage.getItem('vexaro_token');
+  const res = await fetch(`${getBackendApiBase()}/email/test`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({
+      email: email,
+      type: type,
+      name: options.name || '',
+      userId: options.userId || null,
+      rejectionReason: options.rejectionReason || ''
+    })
+  });
+
+  const data = await res.json().catch(() => ({ success: false, error: 'Invalid server response' }));
+  if (!res.ok || data.success === false) {
+    throw new Error(data.error || data.message || `Failed to send email (Status ${res.status})`);
+  }
+  return data;
 }
 
 function getKYCStats() {

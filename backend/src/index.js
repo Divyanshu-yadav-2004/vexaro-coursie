@@ -113,7 +113,7 @@ app.use((err, req, res, next) => {
 });
 
 // ─── Start Server ────────────────────────────────────────────
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`
   ╔═══════════════════════════════════════╗
   ║  🚀 Vexaro KYC Backend Running        ║
@@ -121,6 +121,15 @@ app.listen(PORT, () => {
   ║  Health: http://localhost:${PORT}/api/health ║
   ╚═══════════════════════════════════════╝
   `);
+});
+
+// Prevent unhandled errors/disconnects from crashing server
+process.on('uncaughtException', (err) => {
+  console.error('[SERVER ERROR] Uncaught exception:', err.message, err.code || '');
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[SERVER ERROR] Unhandled promise rejection:', reason?.message || reason);
 });
 
 module.exports = app;

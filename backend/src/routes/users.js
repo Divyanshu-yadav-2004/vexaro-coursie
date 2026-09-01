@@ -98,4 +98,62 @@ router.patch('/profile', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── DELETE /api/users/:id ────────────────────────────────────
+// Admin/owner: permanently delete a user and child records
+router.delete('/:id', authMiddleware, roleGuard('admin', 'owner'), async (req, res) => {
+  const { id } = req.params;
+  const rawId = id ? String(id).trim() : '';
+  const numericId = parseInt(rawId.replace(/^u/i, ''), 10) || null;
+
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // 1. Verify target user exists
+    let userRes;
+    if (numericId) {
+      userRes = await client.query('SELECT id, email, name, role FROM users WHERE id = $1', [numericId]);
+    } else {
+      userRes = await client.query('SELECT id, email, name, role FROM users WHERE email = $1', [rawId.toLowerCase()]);
+    }
+
+    if (!userRes || userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userRes.rows[0];
+
+    // 2. Prevent self-deletion
+    if (String(user.id) === String(req.user.id)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'You cannot delete your own admin account while logged in.' });
+    }
+
+    // 3. Clear reviewed_by references on kyc_records to prevent FK constraint failures
+    await client.query('UPDATE kyc_records SET reviewed_by = NULL WHERE reviewed_by = $1', [user.id]);
+
+    // 4. Delete child kyc_records
+    await client.query('DELETE FROM kyc_records WHERE user_id = $1', [user.id]);
+
+    // 5. Delete activity logs for this user
+    await client.query('DELETE FROM activity_logs WHERE user_id = $1 OR user_id = $2', [String(user.id), `u${user.id}`]);
+
+    // 6. Delete user record
+    await client.query('DELETE FROM users WHERE id = $1', [user.id]);
+
+    await client.query('COMMIT');
+    console.log(`[users:delete] User ${user.email} (ID: ${user.id}) deleted by admin ${req.user.email || req.user.id}`);
+
+    res.json({ message: `User "${user.name || user.email}" deleted successfully`, deletedId: user.id });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('[users:delete] Error deleting user:', err.message);
+    res.status(500).json({ error: 'Failed to delete user: ' + err.message });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 module.exports = router;

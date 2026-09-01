@@ -187,6 +187,40 @@ export async function demoLogin(email) {
   return data.user;
 }
 
+// ─── DELETE OPERATIONS ────────────────────────────────────────
+
+/**
+ * Admin/owner: delete a user by ID (permanently removes user, KYC records, activity logs).
+ * @param {number|string} id
+ */
+export async function deleteUser(id) {
+  const data = await apiFetch(`/users/${id}`, { method: 'DELETE' });
+  return data;
+}
+
+/**
+ * Admin/owner: delete a KYC record by ID, resets user kyc_status.
+ * @param {number|string} id
+ */
+export async function deleteKYC(id) {
+  const data = await apiFetch(`/kyc/${id}`, { method: 'DELETE' });
+  return data;
+}
+
+/**
+ * Admin/owner: send a test/notification email to a specific recipient.
+ * @param {string} email
+ * @param {string} type - template type: 'welcome', 'submitted', 'approved', 'rejected', 'password_reset', 'security'
+ * @param {object} options - optional { name, userId, rejectionReason }
+ */
+export async function sendTestEmail(email, type = 'welcome', options = {}) {
+  const data = await apiFetch('/email/test', {
+    method: 'POST',
+    body: JSON.stringify({ email, type, ...options }),
+  });
+  return data;
+}
+
 // ─── LEGACY REDACTION UTILITIES (kept for display use) ────────
 export function redactEmail(email) {
   if (!email) return '';

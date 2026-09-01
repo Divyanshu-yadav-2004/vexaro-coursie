@@ -106,11 +106,25 @@ router.post('/register', async (req, res) => {
 
     const user = result.rows[0];
 
-    // Trigger Welcome Email (non-blocking)
+    console.log(`[AUTH] User registered successfully: ${user.email}`);
+
+    // Trigger Welcome Email (non-blocking async execution)
     if (user.email) {
-      sendWelcomeEmail(user).catch(emailErr =>
-        console.warn('[auth:register] welcome email failed (non-critical):', emailErr.message)
-      );
+      sendWelcomeEmail(user)
+        .then(emailResult => {
+          if (!emailResult.sent) {
+            if (!emailResult.skipped) {
+              console.error(`[EMAIL ERROR] Welcome email failed for ${user.email}`);
+              console.error(`[EMAIL ERROR] ${emailResult.error || emailResult.reason || 'Unknown delivery failure'}`);
+            } else {
+              console.warn(`[EMAIL] Welcome email skipped for ${user.email}: ${emailResult.reason}`);
+            }
+          }
+        })
+        .catch(emailErr => {
+          console.error(`[EMAIL ERROR] Welcome email failed for ${user.email}`);
+          console.error(`[EMAIL ERROR] ${emailErr.message}`);
+        });
     }
 
     const token = jwt.sign(

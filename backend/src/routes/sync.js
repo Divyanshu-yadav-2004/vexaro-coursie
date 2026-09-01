@@ -689,4 +689,120 @@ router.post('/activity', async (req, res) => {
   }
 });
 
+// ─── DELETE /api/sync/user ────────────────────────────────────
+router.delete('/user', async (req, res) => {
+  const { email, id } = req.body;
+  if (!email && !id) return fail(res, 400, 'User email or ID is required for deletion');
+
+  // Parse numeric ID if present (e.g., 'u42' -> 42, '42' -> 42)
+  const rawId = id ? String(id).trim() : null;
+  const numericId = rawId ? (parseInt(rawId.replace(/^u/i, ''), 10) || null) : null;
+  const userEmail = email ? String(email).trim().toLowerCase() : null;
+
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    let findQuery = '';
+    let findParams = [];
+
+    if (numericId && userEmail) {
+      findQuery = 'SELECT id, email, name FROM users WHERE id = $1 OR email = $2';
+      findParams = [numericId, userEmail];
+    } else if (numericId) {
+      findQuery = 'SELECT id, email, name FROM users WHERE id = $1';
+      findParams = [numericId];
+    } else if (userEmail) {
+      findQuery = 'SELECT id, email, name FROM users WHERE email = $1';
+      findParams = [userEmail];
+    } else {
+      await client.query('ROLLBACK');
+      return success(res, 'User is a client-only record and was removed from local storage', { deleted: true });
+    }
+
+    const userRes = await client.query(findQuery, findParams);
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return success(res, 'User record not found in database or already deleted', { deleted: true });
+    }
+
+    const user = userRes.rows[0];
+
+    // Remove references
+    await client.query('UPDATE kyc_records SET reviewed_by = NULL WHERE reviewed_by = $1', [user.id]);
+    await client.query('DELETE FROM kyc_records WHERE user_id = $1', [user.id]);
+    await client.query('DELETE FROM activity_logs WHERE user_id = $1 OR user_id = $2', [String(user.id), `u${user.id}`]);
+    await client.query('DELETE FROM users WHERE id = $1', [user.id]);
+
+    await client.query('COMMIT');
+    console.log(`[sync:delete/user] Deleted user ${user.email} (ID: ${user.id})`);
+    return success(res, `User ${user.name || user.email} deleted successfully`, { deleted: true, id: user.id });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('[sync:delete/user] Delete error:', err.message);
+    return fail(res, 500, 'Failed to delete user: ' + err.message);
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// ─── DELETE /api/sync/kyc ─────────────────────────────────────
+router.delete('/kyc', async (req, res) => {
+  const { email, id, userId } = req.body;
+  if (!email && !id && !userId) return fail(res, 400, 'KYC ID, user ID, or user email is required');
+
+  const rawKycId = id ? String(id).trim() : null;
+  const numericKycId = rawKycId ? (parseInt(rawKycId.replace(/^k/i, ''), 10) || null) : null;
+
+  const rawUserId = userId ? String(userId).trim() : null;
+  const numericUserId = rawUserId ? (parseInt(rawUserId.replace(/^u/i, ''), 10) || null) : null;
+
+  const userEmail = email ? String(email).trim().toLowerCase() : null;
+
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    let findQuery = '';
+    let findParams = [];
+
+    if (numericKycId) {
+      findQuery = 'SELECT id, user_id FROM kyc_records WHERE id = $1';
+      findParams = [numericKycId];
+    } else if (numericUserId) {
+      findQuery = 'SELECT id, user_id FROM kyc_records WHERE user_id = $1';
+      findParams = [numericUserId];
+    } else if (userEmail) {
+      findQuery = 'SELECT k.id, k.user_id FROM kyc_records k JOIN users u ON u.id = k.user_id WHERE u.email = $1';
+      findParams = [userEmail];
+    } else {
+      await client.query('ROLLBACK');
+      return success(res, 'KYC is a client-only record and was removed from local storage', { deleted: true });
+    }
+
+    const kycRes = await client.query(findQuery, findParams);
+    if (kycRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return success(res, 'KYC record not found in database or already deleted', { deleted: true });
+    }
+
+    const kycRecord = kycRes.rows[0];
+
+    await client.query('DELETE FROM kyc_records WHERE id = $1', [kycRecord.id]);
+    await client.query("UPDATE users SET kyc_status = 'not_started' WHERE id = $1", [kycRecord.user_id]);
+
+    await client.query('COMMIT');
+    console.log(`[sync:delete/kyc] Deleted KYC record ${kycRecord.id} (User: ${kycRecord.user_id})`);
+    return success(res, 'KYC record deleted successfully', { deleted: true, id: kycRecord.id });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('[sync:delete/kyc] Delete error:', err.message);
+    return fail(res, 500, 'Failed to delete KYC record: ' + err.message);
+  } finally {
+    if (client) client.release();
+  }
+});
+
 module.exports = router;

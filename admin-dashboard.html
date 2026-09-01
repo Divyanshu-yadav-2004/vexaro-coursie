@@ -509,7 +509,10 @@
         const subDate = item.kyc ? formatDateTime(item.kyc.submittedAt) : 'Not Submitted';
         
         // Actions details link — view details for every user
-        const actionBtn = `<button class="btn btn-outline-primary btn-sm" onclick="viewKYCDetails('${item.user.id}')">🔍 View Details</button>`;
+        const actionBtn = `<div class="flex gap-1" style="flex-wrap:nowrap;">
+          <button class="btn btn-outline-primary btn-sm" onclick="viewKYCDetails('${item.user.id}')">🔍 View</button>
+          <button class="btn btn-danger btn-sm" id="del-btn-${item.user.id}" onclick="confirmDeleteUser('${item.user.id}', '${(item.user.name || item.user.email || '').replace(/'/g, "\\'")}', this)" style="background:#ef4444;color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">🗑️ Delete</button>
+        </div>`;
 
         html += `
           <tr class="fade-in" style="animation-delay: ${index * 0.05}s">
@@ -692,6 +695,91 @@
 
       logActivity('admin', 'Admin', `Exported ${filteredRecords.length} records in ${format.toUpperCase()} format`, {}, '📊');
     }
+
+    // ─── Manual Delete ─────────────────────────────────────────────
+    let _deleteInProgress = false;
+
+    function confirmDeleteUser(userId, userName, btn) {
+      if (_deleteInProgress) return;
+      const modal = document.getElementById('delete-confirm-modal');
+      document.getElementById('delete-modal-username').textContent = userName || userId;
+      document.getElementById('delete-modal-userid').textContent = userId;
+      modal.style.display = 'flex';
+      modal._targetUserId = userId;
+      modal._targetBtn = btn;
+    }
+
+    function closeDeleteModal() {
+      const modal = document.getElementById('delete-confirm-modal');
+      modal.style.display = 'none';
+      modal._targetUserId = null;
+      modal._targetBtn = null;
+    }
+
+    async function executeDeleteUser() {
+      if (_deleteInProgress) return;
+      const modal = document.getElementById('delete-confirm-modal');
+      const userId = modal._targetUserId;
+      const btn = modal._targetBtn;
+      if (!userId) return;
+
+      _deleteInProgress = true;
+      const confirmBtn = document.getElementById('delete-confirm-btn');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Deleting...';
+      if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
+      closeDeleteModal();
+
+      let deleteSuccess = false;
+      try {
+        await deleteUser(userId);
+        deleteSuccess = true;
+      } catch (err) {
+        showToast('❌ Failed to delete customer: ' + (err.message || 'Unknown error'), 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '🗑️ Delete'; }
+      } finally {
+        _deleteInProgress = false;
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Yes, Delete';
+      }
+
+      if (deleteSuccess) {
+        try {
+          // Remove from local in-memory dataset
+          usersList = usersList.filter(u => !idsMatch(u.id, userId));
+          kycRecordsList = kycRecordsList.filter(k => !idsMatch(k.userId, userId));
+          filteredRecords = filteredRecords.filter(r => !idsMatch(r.user?.id, userId));
+
+          // Reload and re-render dashboard data, stats, and table
+          loadDashboardData();
+          animateCharts();
+
+          showToast('✅ Customer deleted successfully.', 'success');
+          const session = typeof getSession === 'function' ? getSession() : null;
+          logActivity(session?.userId || 'admin', session?.name || 'Admin', `Deleted user ${userId}`, { userId }, '🗑️');
+        } catch (uiErr) {
+          console.error('[executeDeleteUser] UI refresh error after successful deletion:', uiErr);
+          showToast('✅ Customer deleted successfully.', 'success');
+        }
+      }
+    }
   </script>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="delete-confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg,#fff);border-radius:14px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);text-align:center;">
+      <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
+      <h2 style="margin:0 0 8px;font-size:1.25rem;color:var(--text-primary,#111);">Delete Customer?</h2>
+      <p style="color:var(--text-muted,#666);margin:0 0 6px;font-size:0.9rem;">You are about to permanently delete:</p>
+      <p style="font-weight:700;color:#ef4444;font-size:1rem;margin:0 0 6px;" id="delete-modal-username">—</p>
+      <p style="color:var(--text-muted,#888);font-size:0.8rem;margin:0 0 20px;">ID: <span id="delete-modal-userid">—</span></p>
+      <p style="color:var(--text-muted,#666);font-size:0.85rem;margin:0 0 24px;">This will permanently delete the user, their KYC records, and all activity logs. <strong>This cannot be undone.</strong></p>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button onclick="closeDeleteModal()" style="padding:10px 24px;border-radius:8px;border:1px solid var(--border-color,#ddd);background:transparent;cursor:pointer;font-size:0.95rem;color:var(--text-primary,#333);">Cancel</button>
+        <button id="delete-confirm-btn" onclick="executeDeleteUser()" style="padding:10px 24px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-weight:600;font-size:0.95rem;">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
