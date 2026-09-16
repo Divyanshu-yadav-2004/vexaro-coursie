@@ -230,6 +230,7 @@ export default function Step3ReviewSubmit({ profileData, documentData, onBack, o
                 )}
               </div>
             </div>
+          </div>
         </div>
 
         {/* Declaration and Action Bar */}

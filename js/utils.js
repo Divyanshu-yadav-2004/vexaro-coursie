@@ -242,38 +242,136 @@ function createAvatarHTML(user, size = 'md') {
   return `<div class="avatar-placeholder avatar-${size}" style="background:${gradient}">${initials}</div>`;
 }
 
+/**
+ * Check if an error is a Storage QuotaExceededError across browser engines
+ */
+function isQuotaExceededError(err) {
+  return Boolean(
+    err && (
+      err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22 ||
+      err.code === 1014 ||
+      (typeof err.message === 'string' && /quota/i.test(err.message))
+    )
+  );
+}
+
+/**
+ * Safe Web Storage setter
+ * Catches QuotaExceededError, optionally runs an eviction callback, retries once,
+ * and gracefully falls back without crashing the application.
+ */
+function safeStorageSetItem(storage, key, value, options = {}) {
+  if (!storage) return false;
+  let serialized;
+  try {
+    serialized = typeof value === 'string' ? value : JSON.stringify(value);
+  } catch (serializeErr) {
+    console.warn(`[safeStorage] Serialization error for key "${key}":`, serializeErr.message);
+    return false;
+  }
+
+  try {
+    storage.setItem(key, serialized);
+    return true;
+  } catch (err) {
+    if (isQuotaExceededError(err)) {
+      // Storage quota exceeded — attempt eviction and retry once
+      try {
+        if (typeof options.onQuotaExceeded === 'function') {
+          options.onQuotaExceeded(storage, key);
+        } else {
+          // Default eviction: clean up admin session cache if writing another key
+          if (key !== 'vexaro_admin_cache' && typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('vexaro_admin_cache');
+          }
+        }
+      } catch (evictErr) {
+        // Eviction failure should not throw
+      }
+
+      // Retry once after eviction
+      try {
+        storage.setItem(key, serialized);
+        return true;
+      } catch (retryErr) {
+        // Degrade gracefully — keep data in memory, never crash
+        if (options.silent !== true) {
+          console.warn(`[safeStorage] Storage quota reached for "${key}". Value will remain in-memory.`);
+        }
+        return false;
+      }
+    } else {
+      if (options.silent !== true) {
+        console.warn(`[safeStorage] Failed to set "${key}":`, err.message);
+      }
+      return false;
+    }
+  }
+}
+
+/**
+ * Safe Web Storage getter
+ * Safely parses JSON values or returns raw string / default fallback.
+ */
+function safeStorageGetItem(storage, key, defaultValue = null) {
+  if (!storage) return defaultValue;
+  try {
+    const raw = storage.getItem(key);
+    if (raw === null || raw === undefined) return defaultValue;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  } catch (err) {
+    return defaultValue;
+  }
+}
+
+/**
+ * Safe Web Storage remover
+ */
+function safeStorageRemoveItem(storage, key) {
+  if (!storage) return false;
+  try {
+    storage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Attach globally for cross-module usage
+if (typeof window !== 'undefined') {
+  window.safeStorage = {
+    isQuotaExceededError,
+    setItem: safeStorageSetItem,
+    getItem: safeStorageGetItem,
+    removeItem: safeStorageRemoveItem
+  };
+}
+
 /** Save KYC Draft in both localStorage and sessionStorage for bulletproof persistence */
 function saveKycDraft(key, draft) {
-  try {
-    localStorage.setItem(key, JSON.stringify(draft));
-  } catch (e) {
-    console.warn("localStorage quota exceeded, saved in sessionStorage/memory only");
-  }
-  try {
-    sessionStorage.setItem(key, JSON.stringify(draft));
-  } catch (e) {
-    console.error("sessionStorage also full!");
-  }
+  safeStorageSetItem(localStorage, key, draft, { silent: true });
+  safeStorageSetItem(sessionStorage, key, draft, { silent: true });
 }
 
 /** Load KYC Draft checking sessionStorage first (best persistence during page navigation) */
 function loadKycDraft(key) {
-  let draft = null;
-  try {
-    draft = JSON.parse(sessionStorage.getItem(key));
-  } catch (e) {}
+  let draft = safeStorageGetItem(sessionStorage, key);
   if (!draft) {
-    try {
-      draft = JSON.parse(localStorage.getItem(key));
-    } catch (e) {}
+    draft = safeStorageGetItem(localStorage, key);
   }
   return draft;
 }
 
 /** Remove KYC Draft from all caches */
 function removeKycDraft(key) {
-  try { sessionStorage.removeItem(key); } catch (e) {}
-  try { localStorage.removeItem(key); } catch (e) {}
+  safeStorageRemoveItem(sessionStorage, key);
+  safeStorageRemoveItem(localStorage, key);
 }
 
 /** Get clean URL for page navigation based on environment/hosting */

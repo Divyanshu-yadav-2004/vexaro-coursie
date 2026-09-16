@@ -85,46 +85,45 @@
         <div class="stat-icon stat-icon-blue">👥</div>
         <div class="stat-info">
           <div class="stat-number" id="card-total-users">0</div>
-          <div class="stat-label">Total Users</div>
+          <div class="stat-label">Total Accounts</div>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon stat-icon-amber">⏳</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-customer-users">0</div>
+          <div class="stat-label">Customer Accounts</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-green">✅</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-staff-users">0</div>
+          <div class="stat-label">Staff Accounts</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-red">❌</div>
+        <div class="stat-info">
+          <div class="stat-number" id="card-kyc-records">0</div>
+          <div class="stat-label">KYC Records</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-orange">⚡</div>
         <div class="stat-info">
           <div class="stat-number" id="card-pending">0</div>
           <div class="stat-label">Pending Verification</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon stat-icon-green">✅</div>
-        <div class="stat-info">
-          <div class="stat-number" id="card-approved">0</div>
-          <div class="stat-label">Approved</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-red">❌</div>
-        <div class="stat-info">
-          <div class="stat-number" id="card-rejected">0</div>
-          <div class="stat-label">Rejected</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-orange">⚡</div>
-        <div class="stat-info">
-          <div class="stat-number" id="card-today">0</div>
-          <div class="stat-label">Today's Requests</div>
-        </div>
-      </div>
-      <div class="stat-card">
         <div class="stat-icon stat-icon-purple">📅</div>
         <div class="stat-info">
-          <div class="stat-number" id="card-month">0</div>
-          <div class="stat-label">This Month</div>
+          <div class="stat-number" id="card-new-kyc-today">0</div>
+          <div class="stat-label">New KYC Requests Today</div>
         </div>
       </div>
     </div>
-
     <!-- Charts Row -->
     <div class="grid-2 mb-6">
       <!-- Status Distribution Bar Chart -->
@@ -198,7 +197,7 @@
           <div class="flex gap-3 align-center">
             <span class="text-sm font-semibold">Sort By:</span>
             <select id="sort-select" class="sort-select" onchange="handleSortChange(event)">
-              <option value="latest">Latest Submissions</option>
+              <option value="latest">Recently Updated</option>
               <option value="oldest">Oldest Submissions</option>
               <option value="name">Name (A-Z)</option>
               <option value="status">Verification Status</option>
@@ -268,6 +267,7 @@
 
   <!-- Scripts -->
   <script src="js/utils.js"></script>
+  <script src="js/dashboard-metrics.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/toast.js"></script>
@@ -303,7 +303,9 @@
     }
 
     // State Variables
-    let usersList = [];
+    let allUsers = [];
+    let customerUsers = [];
+    let staffUsers = [];
     let kycRecordsList = [];
     let filteredRecords = [];
     
@@ -350,10 +352,15 @@
 
     function loadDashboardData() {
       // Reload raw records
-      usersList = getUsers().filter(u => u.role !== 'admin');
+      const accountCollections = VexaroDashboardMetrics.getAccountCollections(getUsers());
+      allUsers = accountCollections.allUsers;
+      customerUsers = accountCollections.customerUsers;
+      staffUsers = accountCollections.staffUsers;
       kycRecordsList = getKYCRecords();
       console.log('[admin-dashboard] loaded data from cache/database response', {
-        users: usersList.length,
+        totalAccounts: allUsers.length,
+        customerAccounts: customerUsers.length,
+        staffAccounts: staffUsers.length,
         kycRecords: kycRecordsList.length,
         latestKyc: kycRecordsList[0] ? {
           id: kycRecordsList[0].id,
@@ -364,13 +371,17 @@
       });
 
       // Set Cards numbers
-      const stats = getKYCStats();
-      document.getElementById('card-total-users').textContent = usersList.length;
+      const stats = VexaroDashboardMetrics.buildDashboardMetrics({
+        users: allUsers,
+        records: kycRecordsList,
+        activities: getActivityLogs()
+      });
+      document.getElementById('card-total-users').textContent = stats.totalAccounts;
+      document.getElementById('card-customer-users').textContent = stats.customerAccounts;
+      document.getElementById('card-staff-users').textContent = stats.staffAccounts;
+      document.getElementById('card-kyc-records').textContent = stats.kycRecords;
       document.getElementById('card-pending').textContent = stats.pending;
-      document.getElementById('card-approved').textContent = stats.approved;
-      document.getElementById('card-rejected').textContent = stats.rejected;
-      document.getElementById('card-today').textContent = stats.today;
-      document.getElementById('card-month').textContent = stats.thisMonth;
+      document.getElementById('card-new-kyc-today').textContent = stats.newKycRequestsToday;
 
       // Update Chart labels text
       const totalKYC = stats.pending + stats.approved + stats.rejected || 1;
@@ -431,47 +442,12 @@
     }
 
     function applyFilters() {
-      // Link users with their KYC submissions
-      let records = [];
-
-      usersList.forEach(user => {
-        const kyc = kycRecordsList.find(k => String(k.userId) === String(user.id));
-        records.push({
-          user: user,
-          kyc: kyc,
-          // Fallback timestamp values for sorting
-          timestamp: kyc ? kyc.submittedAt : user.createdAt,
-          status: user.kycStatus
-        });
+      const customerRows = VexaroDashboardMetrics.buildCustomerKycRows(customerUsers, kycRecordsList);
+      filteredRecords = VexaroDashboardMetrics.filterAndSortCustomerKycRows(customerRows, {
+        filter: currentFilter,
+        search: searchQuery,
+        sort: currentSort
       });
-
-      // 1. Search Query Filter
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        records = records.filter(r => 
-          r.user.name.toLowerCase().includes(q) ||
-          r.user.email.toLowerCase().includes(q) ||
-          r.user.mobile.includes(q)
-        );
-      }
-
-      // 2. Status Category Filter
-      if (currentFilter !== 'all') {
-        records = records.filter(r => r.status === currentFilter);
-      }
-
-      // 3. Sort Order
-      if (currentSort === 'latest') {
-        records.sort((a, b) => b.timestamp - a.timestamp);
-      } else if (currentSort === 'oldest') {
-        records.sort((a, b) => a.timestamp - b.timestamp);
-      } else if (currentSort === 'name') {
-        records.sort((a, b) => a.user.name.localeCompare(b.user.name));
-      } else if (currentSort === 'status') {
-        records.sort((a, b) => a.status.localeCompare(b.status));
-      }
-
-      filteredRecords = records;
       console.log('[admin-dashboard] rendered table dataset', {
         filter: currentFilter,
         searchQuery,
@@ -499,9 +475,9 @@
       paginationWrap.style.display = 'flex';
 
       // Slice items for pagination
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      const endIndex = Math.min(startIndex + itemsPerPage, filteredRecords.length);
-      const paginatedItems = filteredRecords.slice(startIndex, endIndex);
+      const page = VexaroDashboardMetrics.paginateRows(filteredRecords, currentPage, itemsPerPage);
+      currentPage = page.currentPage;
+      const { startIndex, endIndex, items: paginatedItems } = page;
 
       let html = '';
       paginatedItems.forEach((item, index) => {
@@ -747,7 +723,9 @@
       if (deleteSuccess) {
         try {
           // Remove from local in-memory dataset
-          usersList = usersList.filter(u => !idsMatch(u.id, userId));
+          allUsers = allUsers.filter(u => !idsMatch(u.id, userId));
+          customerUsers = customerUsers.filter(u => !idsMatch(u.id, userId));
+          staffUsers = staffUsers.filter(u => !idsMatch(u.id, userId));
           kycRecordsList = kycRecordsList.filter(k => !idsMatch(k.userId, userId));
           filteredRecords = filteredRecords.filter(r => !idsMatch(r.user?.id, userId));
 

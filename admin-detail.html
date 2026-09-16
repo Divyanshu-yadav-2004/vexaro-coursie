@@ -231,6 +231,13 @@
     // Validate Admin Session
     requireAdmin();
 
+    // Re-render whenever admin data cache is refreshed from DB
+    window.addEventListener('vexaro-admin-data-refreshed', () => {
+      if (typeof loadKYCRecord === 'function') {
+        loadKYCRecord();
+      }
+    });
+
     // Theme toggler
     const themeBtn = document.getElementById('theme-toggle-btn');
     themeBtn.addEventListener('click', () => {

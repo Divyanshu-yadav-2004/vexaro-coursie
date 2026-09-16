@@ -271,11 +271,91 @@ function isAdminPage() {
   return /(^|\/)admin-(dashboard|detail)(\.html)?$/i.test(window.location.pathname);
 }
 
+function isAdminDetailPage() {
+  return /(^|\/)admin-detail(\.html)?$/i.test(window.location.pathname);
+}
+
 // Admin pages use PostgreSQL as the sole source of truth (in-memory cache only).
-// Never persist admin datasets to localStorage — large KYC payloads can exceed quota
-// and shared localStorage is vulnerable to cross-tab overwrites from the user portal.
+// Never persist heavy admin datasets or document binaries (base64/PDFs) to browser storage —
+// doing so quickly exceeds storage quotas (5MB) and triggers QuotaExceededError.
+// We persist only lightweight metadata (users, KYC status, recent activity) in sessionStorage.
 const ADMIN_SESSION_CACHE_KEY = 'vexaro_admin_cache';
 const ADMIN_SESSION_CACHE_TTL_MS = 5 * 60 * 1000;
+const ADMIN_CACHE_VERSION = 2;
+const MAX_CACHED_ACTIVITIES = 50;
+
+const SENSITIVE_USER_KEYS = new Set([
+  'password', 'password_hash', 'passwordHash', 'token', 'authToken', 'secret', 'jwt'
+]);
+
+function sanitizeUserForAdminCache(user) {
+  if (!user || typeof user !== 'object') return null;
+  const clean = {};
+  for (const [k, v] of Object.entries(user)) {
+    if (SENSITIVE_USER_KEYS.has(k)) continue;
+    // Strip oversized base64 profile pictures if any
+    if (k === 'profilePhoto' && typeof v === 'string' && v.startsWith('data:') && v.length > 50000) {
+      continue;
+    }
+    clean[k] = v;
+  }
+  return clean;
+}
+
+function sanitizeDocumentMeta(doc) {
+  if (!doc) return null;
+  return {
+    name: doc.name || 'document',
+    size: doc.size || 0,
+    type: doc.type || 'image/png',
+    hasData: Boolean(doc.data || doc.base64 || doc.path)
+  };
+}
+
+function sanitizeRecordForAdminCache(rec) {
+  if (!rec || typeof rec !== 'object') return null;
+  return {
+    id: rec.id,
+    userId: rec.userId,
+    status: rec.status,
+    rejectionReason: rec.rejectionReason || null,
+    submittedAt: rec.submittedAt || null,
+    reviewedAt: rec.reviewedAt || null,
+    reviewedBy: rec.reviewedBy || null,
+    approvedOn: rec.approvedOn || null,
+    timeline: Array.isArray(rec.timeline) ? rec.timeline : [],
+    updatedAt: rec.updatedAt || Date.now(),
+    whatsapp: rec.whatsapp || null,
+    // Store only document metadata — NEVER large base64/PDF binaries!
+    aadhaarFront: sanitizeDocumentMeta(rec.aadhaarFront),
+    aadhaarBack: sanitizeDocumentMeta(rec.aadhaarBack),
+    panCard: sanitizeDocumentMeta(rec.panCard),
+    passbookPhoto: sanitizeDocumentMeta(rec.passbookPhoto)
+  };
+}
+
+function sanitizeActivityForAdminCache(act) {
+  if (!act || typeof act !== 'object') return null;
+  let details = act.details;
+  if (details && typeof details === 'object') {
+    try {
+      const str = JSON.stringify(details);
+      if (str.length > 500) {
+        details = { summary: str.slice(0, 200) + '...' };
+      }
+    } catch {
+      details = {};
+    }
+  }
+  return {
+    id: act.id,
+    userId: act.userId,
+    userName: act.userName,
+    action: act.action,
+    timestamp: act.timestamp,
+    details: details || {}
+  };
+}
 
 const adminDataCache = {
   users: null,
@@ -285,6 +365,19 @@ const adminDataCache = {
 };
 
 let adminDataLoadPromise = null;
+
+function clearAdminDataCache() {
+  adminDataCache.users = null;
+  adminDataCache.records = null;
+  adminDataCache.activities = null;
+  adminDataCache.loadedAt = 0;
+  adminDataCache.source = 'database';
+  if (typeof safeStorageRemoveItem === 'function') {
+    safeStorageRemoveItem(sessionStorage, ADMIN_SESSION_CACHE_KEY);
+  } else {
+    try { sessionStorage.removeItem(ADMIN_SESSION_CACHE_KEY); } catch {}
+  }
+}
 
 function readLocalArray(key) {
   try {
@@ -307,32 +400,94 @@ function buildAdminLocalFallbackData() {
   return { users, records, activities, source: 'localStorage' };
 }
 
-function hasAdminCache() {
-  return isAdminPage() && Array.isArray(adminDataCache.users);
+function hasAdminCache(options = {}) {
+  if (!isAdminPage() || !Array.isArray(adminDataCache.users)) return false;
+  // If on admin-detail page or requireDocuments is requested, verify document data exists in memory
+  if (options.requireDocuments || isAdminDetailPage()) {
+    const records = adminDataCache.records;
+    if (!Array.isArray(records) || records.length === 0) return true;
+    const hasAnyDocsExpected = records.some(r =>
+      (r.aadhaarFront && (r.aadhaarFront.name || r.aadhaarFront.hasData)) ||
+      (r.panCard && (r.panCard.name || r.panCard.hasData)) ||
+      (r.passbookPhoto && (r.passbookPhoto.name || r.passbookPhoto.hasData))
+    );
+    const hasAnyDocData = records.some(r =>
+      (r.aadhaarFront && r.aadhaarFront.data) ||
+      (r.panCard && r.panCard.data) ||
+      (r.passbookPhoto && r.passbookPhoto.data)
+    );
+    if (hasAnyDocsExpected && !hasAnyDocData) {
+      return false; // Document metadata only — need fresh DB fetch to populate binaries
+    }
+  }
+  return true;
 }
 
 function persistAdminCacheToSession(users, records, activities) {
   if (!isAdminPage()) return;
   try {
-    sessionStorage.setItem(ADMIN_SESSION_CACHE_KEY, JSON.stringify({
-      users,
-      records,
-      activities,
-      cachedAt: Date.now()
-    }));
+    const cleanUsers = Array.isArray(users) ? users.map(sanitizeUserForAdminCache).filter(Boolean) : [];
+    const cleanRecords = Array.isArray(records) ? records.map(sanitizeRecordForAdminCache).filter(Boolean) : [];
+    const cleanActivities = Array.isArray(activities)
+      ? activities.slice(0, MAX_CACHED_ACTIVITIES).map(sanitizeActivityForAdminCache).filter(Boolean)
+      : [];
+
+    const cachePayload = {
+      version: ADMIN_CACHE_VERSION,
+      cachedAt: Date.now(),
+      users: cleanUsers,
+      records: cleanRecords,
+      activities: cleanActivities
+    };
+
+    if (typeof safeStorageSetItem === 'function') {
+      safeStorageSetItem(sessionStorage, ADMIN_SESSION_CACHE_KEY, cachePayload, {
+        onQuotaExceeded: (storage, key) => {
+          storage.removeItem(key);
+        }
+      });
+    } else if (typeof window !== 'undefined' && window.safeStorage?.setItem) {
+      window.safeStorage.setItem(sessionStorage, ADMIN_SESSION_CACHE_KEY, cachePayload);
+    } else {
+      sessionStorage.setItem(ADMIN_SESSION_CACHE_KEY, JSON.stringify(cachePayload));
+    }
   } catch (err) {
-    console.warn('Admin session cache skipped (storage quota):', err.message);
+    // Graceful fallback: Never crash the application if optional session caching fails
+    console.warn('[Admin Cache] Session cache write skipped:', err.message);
   }
 }
 
 function hydrateAdminCacheFromSession() {
   if (!isAdminPage() || hasAdminCache()) return false;
   try {
-    const raw = sessionStorage.getItem(ADMIN_SESSION_CACHE_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    if (!validateSyncPayload(parsed)) return false;
-    if (Date.now() - (parsed.cachedAt || 0) > ADMIN_SESSION_CACHE_TTL_MS) return false;
+    let parsed;
+    if (typeof safeStorageGetItem === 'function') {
+      parsed = safeStorageGetItem(sessionStorage, ADMIN_SESSION_CACHE_KEY);
+    } else {
+      const raw = sessionStorage.getItem(ADMIN_SESSION_CACHE_KEY);
+      parsed = raw ? JSON.parse(raw) : null;
+    }
+    if (!parsed || typeof parsed !== 'object') return false;
+
+    // Validate version and TTL; discard stale or obsolete cache entries
+    if (parsed.version !== ADMIN_CACHE_VERSION || (Date.now() - (parsed.cachedAt || 0) > ADMIN_SESSION_CACHE_TTL_MS)) {
+      if (typeof safeStorageRemoveItem === 'function') {
+        safeStorageRemoveItem(sessionStorage, ADMIN_SESSION_CACHE_KEY);
+      } else {
+        sessionStorage.removeItem(ADMIN_SESSION_CACHE_KEY);
+      }
+      return false;
+    }
+
+    if (!validateSyncPayload(parsed)) {
+      if (typeof safeStorageRemoveItem === 'function') {
+        safeStorageRemoveItem(sessionStorage, ADMIN_SESSION_CACHE_KEY);
+      } else {
+        sessionStorage.removeItem(ADMIN_SESSION_CACHE_KEY);
+      }
+      return false;
+    }
+
     if (parsed.records.length === 0) {
       const fallback = buildAdminLocalFallbackData();
       if (fallback && fallback.records.length > 0) {
@@ -343,10 +498,12 @@ function hydrateAdminCacheFromSession() {
         return true;
       }
     }
+
     setAdminCache(parsed.users, parsed.records, parsed.activities, { persist: false });
     return true;
   } catch (err) {
-    console.warn('Failed to hydrate admin cache from session:', err.message);
+    console.warn('[Admin Cache] Failed to hydrate admin cache from session:', err.message);
+    try { sessionStorage.removeItem(ADMIN_SESSION_CACHE_KEY); } catch {}
     return false;
   }
 }
@@ -362,11 +519,11 @@ function setAdminCache(users, records, activities, options = {}) {
 }
 
 function ensureAdminDataLoaded(options = {}) {
-  if (hasAdminCache()) return Promise.resolve(adminDataCache);
+  if (hasAdminCache(options)) return Promise.resolve(adminDataCache);
   if (adminDataLoadPromise) return adminDataLoadPromise;
 
   hydrateAdminCacheFromSession();
-  if (hasAdminCache()) return Promise.resolve(adminDataCache);
+  if (hasAdminCache(options)) return Promise.resolve(adminDataCache);
 
   adminDataLoadPromise = refreshAdminDataFromDatabase({
     silent: options.silent !== false

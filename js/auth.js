@@ -111,6 +111,12 @@ function requireAdmin(redirectTo = 'index.html') {
 /** Logout — clear session and redirect */
 function logout() {
   sessionStorage.removeItem(SESSION_KEY);
+  try {
+    sessionStorage.removeItem('vexaro_admin_cache');
+  } catch (e) {}
+  if (typeof clearAdminDataCache === 'function') {
+    clearAdminDataCache();
+  }
   window.location.href = getCleanUrl('index.html');
 }
 
@@ -157,6 +163,10 @@ function debounceRefresh() {
 setInterval(() => {
   if (isSessionExpired() && sessionStorage.getItem(SESSION_KEY)) {
     sessionStorage.removeItem(SESSION_KEY);
+    try { sessionStorage.removeItem('vexaro_admin_cache'); } catch (e) {}
+    if (typeof clearAdminDataCache === 'function') {
+      clearAdminDataCache();
+    }
     if (!window.location.href.includes('index.html')) {
       window.location.href = getCleanUrl('index.html');
     }
