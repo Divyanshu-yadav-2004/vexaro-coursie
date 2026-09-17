@@ -19,6 +19,7 @@
     </div>
     <div class="navbar-title hide-mobile">Owner Administration Desk</div>
     <div class="navbar-actions">
+      <button class="btn btn-outline btn-sm" id="btn-admin-refresh" onclick="triggerManualRefresh(this)" title="Sync latest data from PostgreSQL" style="margin-right:6px;">🔄 Refresh Data</button>
       <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌓</button>
       <button class="btn btn-outline btn-sm" onclick="logout()">🚪 Sign Out</button>
     </div>
@@ -349,6 +350,24 @@
         }
       }
     });
+
+    async function triggerManualRefresh(btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Refreshing...';
+      }
+      try {
+        await refreshAdminDataFromDatabase({ silent: false, forceFull: true });
+        showToast('✅ Synchronized latest data from database', 'success');
+      } catch (err) {
+        showToast('⚠️ Sync error: ' + err.message, 'warning');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🔄 Refresh Data';
+        }
+      }
+    }
 
     function loadDashboardData() {
       // Reload raw records

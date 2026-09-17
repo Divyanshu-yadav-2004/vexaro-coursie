@@ -519,14 +519,20 @@ function setAdminCache(users, records, activities, options = {}) {
 }
 
 function ensureAdminDataLoaded(options = {}) {
-  if (hasAdminCache(options)) return Promise.resolve(adminDataCache);
+  const forceRefresh = options.forceRefresh === true;
+  if (!forceRefresh) {
+    if (hasAdminCache(options)) return Promise.resolve(adminDataCache);
+    if (adminDataLoadPromise) return adminDataLoadPromise;
+
+    hydrateAdminCacheFromSession();
+    if (hasAdminCache(options)) return Promise.resolve(adminDataCache);
+  }
+
   if (adminDataLoadPromise) return adminDataLoadPromise;
 
-  hydrateAdminCacheFromSession();
-  if (hasAdminCache(options)) return Promise.resolve(adminDataCache);
-
   adminDataLoadPromise = refreshAdminDataFromDatabase({
-    silent: options.silent !== false
+    silent: options.silent !== false,
+    forceFull: true
   }).finally(() => {
     adminDataLoadPromise = null;
   });
