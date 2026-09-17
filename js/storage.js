@@ -1049,7 +1049,14 @@ async function createKYC(kycData, options = {}) {
 
   if (requireBackend) {
     await syncPost('/user', user, { critical: true });
-    await syncPost('/kyc', { ...newKYC, email: user.email }, { critical: true });
+    const kycSyncResult = await syncPost('/kyc', { ...newKYC, email: user.email }, { critical: true });
+    
+    // Check server confirmation
+    const serverConfirmed = kycSyncResult?.success === true && kycSyncResult?.data?.syncConfirmed === true;
+    newKYC.syncState = serverConfirmed ? 'synced' : 'pending_sync';
+    newKYC.syncConfirmed = serverConfirmed;
+    newKYC.documentsStored = kycSyncResult?.data?.documentsStored || null;
+    
     saveRecordLocally(newKYC);
     return newKYC;
   }
@@ -1057,11 +1064,18 @@ async function createKYC(kycData, options = {}) {
   // Always save to localStorage FIRST so the record is never lost,
   // then attempt backend sync. A network failure here must NEVER block
   // the user — syncPost already queues the payload for the next retry.
+  newKYC.syncState = 'pending_sync';
   saveRecordLocally(newKYC);
 
   try {
     await syncPost('/user', user, { critical: false });
-    await syncPost('/kyc', { ...newKYC, email: user.email }, { critical: false });
+    const kycSyncResult = await syncPost('/kyc', { ...newKYC, email: user.email }, { critical: false });
+    if (kycSyncResult?.success === true && kycSyncResult?.data?.syncConfirmed === true) {
+      newKYC.syncState = 'synced';
+      newKYC.syncConfirmed = true;
+      newKYC.documentsStored = kycSyncResult.data.documentsStored || null;
+      saveRecordLocally(newKYC);
+    }
   } catch (syncErr) {
     // Backend unavailable — data is already in localStorage and the
     // offline queue will retry automatically every 30 seconds.

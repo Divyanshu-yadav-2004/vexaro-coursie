@@ -622,6 +622,29 @@ router.post('/kyc', async (req, res) => {
       submittedAt: kycResult.rows[0]?.submitted_at
     });
 
+    // ── 4. Verify persisted record in PostgreSQL before COMMIT ──
+    const writtenRow = kycResult.rows[0];
+    const docsStored = {
+      aadhaarFront: Boolean(writtenRow?.aadhaar_front_data || writtenRow?.aadhaar_front_path),
+      aadhaarBack: Boolean(writtenRow?.aadhaar_back_data || writtenRow?.aadhaar_back_path),
+      panCard: Boolean(writtenRow?.pan_card_data || writtenRow?.pan_card_path),
+      passbookPhoto: Boolean(writtenRow?.passbook_photo_data || writtenRow?.passbook_photo_path)
+    };
+
+    // If client supplied document data/name but the database column is empty, rollback and fail
+    if (k.aadhaarFront?.data && !writtenRow?.aadhaar_front_data) {
+      throw new Error('Database verification failed: aadhaar_front_data was supplied but not saved');
+    }
+    if (k.aadhaarBack?.data && !writtenRow?.aadhaar_back_data) {
+      throw new Error('Database verification failed: aadhaar_back_data was supplied but not saved');
+    }
+    if (k.panCard?.data && !writtenRow?.pan_card_data) {
+      throw new Error('Database verification failed: pan_card_data was supplied but not saved');
+    }
+    if (passbookDoc?.data && !writtenRow?.passbook_photo_data) {
+      throw new Error('Database verification failed: passbook_photo_data was supplied but not saved');
+    }
+
     // Update user's kyc_status to match the KYC record status in transaction
     const userStatusResult = await client.query(
       'UPDATE users SET kyc_status = $1, updated_at = NOW() WHERE id = $2',
@@ -695,7 +718,14 @@ router.post('/kyc', async (req, res) => {
         messageId: whatsapp.messageId || null
       }
     });
-    return success(res, 'KYC synced successfully', { ...kycResult.rows[0], whatsapp });
+    return success(res, 'KYC synced successfully', {
+      syncConfirmed: true,
+      userId: dbUserId,
+      kycId: writtenRow?.id,
+      status: writtenRow?.status,
+      documentsStored: docsStored,
+      whatsapp
+    });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[sync:kyc] failed', {

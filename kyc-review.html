@@ -367,8 +367,12 @@
           // Log Activity log
           logActivity(currentUser.id, currentUser.name, 'Submitted KYC files for validation', { kycId: kycRecord.id }, '📤');
           
-          // Remove draft uploads from cache
-          removeKycDraft(draftKey);
+          // Remove draft uploads from cache ONLY when server confirmed synchronization
+          if (kycRecord.syncConfirmed) {
+            removeKycDraft(draftKey);
+          } else {
+            console.warn('[kyc-review] Draft preserved locally because server sync is pending retry');
+          }
 
           showToast('✅ KYC Submitted Successfully! Verification pending.', 'success');
           
