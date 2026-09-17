@@ -500,7 +500,7 @@
                 </div>
                 <div class="flex-col">
                   <span class="font-bold truncate" style="max-width:180px;">${sanitizeHTML(item.user.name)}</span>
-                  <span class="text-xs text-muted">ID: ${item.user.id.slice(0,8)}...</span>
+                  <span class="text-xs text-muted">ID: ${String(item.user.id || '').slice(0,8)}</span>
                 </div>
               </div>
             </td>

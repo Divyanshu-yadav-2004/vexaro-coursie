@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const { sendKycApprovedWhatsApp } = require('../services/whatsapp');
 const { sendKycApprovedEmail, sendKycRejectedEmail } = require('../services/email');
+const crypto = require('crypto');
 const router = express.Router();
 
 
@@ -24,6 +25,18 @@ function success(res, message, data = {}) {
 }
 
 function summarizeKycPayload(k = {}) {
+  const docMeta = (d) => {
+    if (!d) return { present: false };
+    const hasData = Boolean(d.data || d.base64);
+    return {
+      present: Boolean(d.name || hasData),
+      name: d.name || null,
+      size: d.size || null,
+      hasData: hasData,
+      dataLength: (d.data && typeof d.data === 'string') ? d.data.length : null
+    };
+  };
+
   return {
     id: k.id,
     userId: k.userId,
@@ -32,10 +45,10 @@ function summarizeKycPayload(k = {}) {
     submittedAt: k.submittedAt,
     updatedAt: k.updatedAt,
     documents: {
-      aadhaarFront: Boolean(k.aadhaarFront),
-      aadhaarBack: Boolean(k.aadhaarBack),
-      panCard: Boolean(k.panCard),
-      passbookPhoto: Boolean(k.passbookPhoto)
+      aadhaarFront: docMeta(k.aadhaarFront),
+      aadhaarBack: docMeta(k.aadhaarBack),
+      panCard: docMeta(k.panCard),
+      passbookPhoto: docMeta(k.passbookPhoto || k.passbook)
     }
   };
 }
@@ -419,8 +432,8 @@ router.post('/user', async (req, res) => {
         ]
       );
     } else {
-      // Insert new user (default password is hash of 'admin@kyc123')
-      const defaultHash = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
+      // Use a cryptographically random, unusable hash — no one can authenticate with this password
+      const defaultHash = '$2a$10$' + crypto.randomBytes(24).toString('base64').replace(/[^a-zA-Z0-9]/g, 'x').slice(0, 53);
       const role = (u.email.toLowerCase().includes('admin') || u.role === 'admin') ? 'admin' : (u.email.toLowerCase().includes('owner') || u.role === 'owner') ? 'owner' : 'user';
       userResult = await client.query(
         `INSERT INTO users
@@ -473,14 +486,22 @@ router.post('/kyc', async (req, res) => {
     await client.query('BEGIN');
 
     // 1. Find user by email
-    const userRes = await client.query(
+    let userRes = await client.query(
       'SELECT id, name, first_name, last_name, mobile, updated_at FROM users WHERE email = $1',
       [k.email.toLowerCase()]
     );
     if (userRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      console.warn('[sync:kyc] rollback: user not found', { email: k.email });
-      return fail(res, 404, 'User not found in database for KYC association');
+      // Auto-create user if missing so KYC submission is never lost
+      // Use an unguessable random hex password hash so no one can login with a default password
+      const unusablePasswordHash = '$2a$10$' + crypto.randomBytes(24).toString('base64').replace(/[^a-zA-Z0-9]/g, 'x').slice(0, 53);
+      const fallbackName = k.userName || k.name || k.email.split('@')[0];
+      userRes = await client.query(
+        `INSERT INTO users (name, email, password_hash, role, kyc_status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, 'user', $4, 'self', NOW(), NOW())
+         RETURNING id, name, first_name, last_name, mobile, updated_at`,
+        [fallbackName, k.email.toLowerCase(), unusablePasswordHash, k.status || 'pending']
+      );
+      console.log('[sync:kyc] auto-created missing user for KYC association', { email: k.email, id: userRes.rows[0]?.id });
     }
     const dbUserId = userRes.rows[0].id;
     console.log('[sync:kyc] associated user', {
@@ -488,11 +509,36 @@ router.post('/kyc', async (req, res) => {
       userId: dbUserId
     });
 
+    // Check passbook alias fallback (frontend may send passbook or passbookPhoto)
+    const passbookDoc = k.passbookPhoto || k.passbook || null;
+
+    // Validate payload: If submitting/pending, log document presence metadata
+    const docMetaLog = {
+      aadhaarFront: Boolean(k.aadhaarFront?.data || k.aadhaarFront?.name),
+      aadhaarBack: Boolean(k.aadhaarBack?.data || k.aadhaarBack?.name),
+      panCard: Boolean(k.panCard?.data || k.panCard?.name),
+      passbookPhoto: Boolean(passbookDoc?.data || passbookDoc?.name)
+    };
+    console.log('[sync:kyc] document presence check', { email: k.email, ...docMetaLog });
+
+    // If client claims to be submitting KYC ('pending') but all 4 documents are completely absent
+    const statusVal = k.status || 'pending';
+    if (statusVal === 'pending' && !docMetaLog.aadhaarFront && !docMetaLog.aadhaarBack && !docMetaLog.panCard && !docMetaLog.passbookPhoto) {
+      console.warn('[sync:kyc] received pending submission with no document metadata or data', { email: k.email });
+    }
+
     // Check if KYC record already exists for this user
     const kycFindRes = await client.query(
       'SELECT id, status, updated_at FROM kyc_records WHERE user_id = $1 FOR UPDATE',
       [dbUserId]
     );
+
+    // Secure reviewedBy resolution: if numeric admin ID, use it, else null
+    let validReviewedBy = null;
+    if (k.reviewedBy) {
+      const parsedReviewer = parseInt(String(k.reviewedBy).replace(/^admin/i, ''), 10);
+      if (Number.isFinite(parsedReviewer)) validReviewedBy = parsedReviewer;
+    }
 
     let kycResult;
     let previousStatus = null;
@@ -528,7 +574,7 @@ router.post('/kyc', async (req, res) => {
              passbook_photo_name = COALESCE($10, passbook_photo_name),
              passbook_photo_size = COALESCE($11, passbook_photo_size),
              passbook_photo_data = COALESCE($12, passbook_photo_data),
-             status = $13, rejection_reason = $14, reviewed_by = $15, reviewed_at = $16,
+             status = $13, rejection_reason = $14, reviewed_by = COALESCE($15, reviewed_by), reviewed_at = $16,
              submitted_at = COALESCE($17, submitted_at),
              updated_at = NOW()
          WHERE user_id = $18
@@ -537,16 +583,16 @@ router.post('/kyc', async (req, res) => {
           k.aadhaarFront?.name || null, k.aadhaarFront?.size || null, k.aadhaarFront?.data || null,
           k.aadhaarBack?.name || null, k.aadhaarBack?.size || null, k.aadhaarBack?.data || null,
           k.panCard?.name || null, k.panCard?.size || null, k.panCard?.data || null,
-          k.passbookPhoto?.name || null, k.passbookPhoto?.size || null, k.passbookPhoto?.data || null,
-          k.status || 'pending', k.rejectionReason || null,
-          k.reviewedBy ? 1 : null, // admin ID placeholder
+          passbookDoc?.name || null, passbookDoc?.size || null, passbookDoc?.data || null,
+          statusVal, k.rejectionReason || null,
+          validReviewedBy,
           k.reviewedAt ? new Date(k.reviewedAt) : null,
           k.submittedAt ? new Date(k.submittedAt) : null,
           dbUserId
         ]
       );
     } else {
-      // Insert new KYC record (allow partial uploads)
+      // Insert new KYC record
       kycResult = await client.query(
         `INSERT INTO kyc_records
           (user_id, aadhaar_front_name, aadhaar_front_size, aadhaar_front_data,
@@ -561,8 +607,8 @@ router.post('/kyc', async (req, res) => {
           k.aadhaarFront?.name || null, k.aadhaarFront?.size || null, k.aadhaarFront?.data || null,
           k.aadhaarBack?.name || null, k.aadhaarBack?.size || null, k.aadhaarBack?.data || null,
           k.panCard?.name || null, k.panCard?.size || null, k.panCard?.data || null,
-          k.passbookPhoto?.name || null, k.passbookPhoto?.size || null, k.passbookPhoto?.data || null,
-          k.status || 'pending', k.rejectionReason || null,
+          passbookDoc?.name || null, passbookDoc?.size || null, passbookDoc?.data || null,
+          statusVal, k.rejectionReason || null,
           k.submittedAt ? new Date(k.submittedAt) : null
         ]
       );

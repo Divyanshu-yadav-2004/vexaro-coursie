@@ -1037,19 +1037,27 @@ async function createKYC(kycData, options = {}) {
     throw new Error('KYC submission cannot be saved because the user email is missing.');
   }
 
+  function saveRecordLocally(rec) {
+    const existingIdx = records.findIndex(k => idsMatch(k.userId, rec.userId));
+    if (existingIdx !== -1) {
+      records[existingIdx] = { ...records[existingIdx], ...rec, id: records[existingIdx].id || rec.id };
+    } else {
+      records.push(rec);
+    }
+    saveKYCRecords(records);
+  }
+
   if (requireBackend) {
     await syncPost('/user', user, { critical: true });
     await syncPost('/kyc', { ...newKYC, email: user.email }, { critical: true });
-    records.push(newKYC);
-    saveKYCRecords(records);
+    saveRecordLocally(newKYC);
     return newKYC;
   }
 
   // Always save to localStorage FIRST so the record is never lost,
   // then attempt backend sync. A network failure here must NEVER block
   // the user — syncPost already queues the payload for the next retry.
-  records.push(newKYC);
-  saveKYCRecords(records);
+  saveRecordLocally(newKYC);
 
   try {
     await syncPost('/user', user, { critical: false });

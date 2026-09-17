@@ -44,29 +44,24 @@ const upload = multer({
 
 // ─── Helper: format KYC record for API response ───────────────
 function formatKYC(row) {
+  const buildDoc = (path, name, size, data) => {
+    if (!path && !name && !data) return null;
+    return {
+      name: name || (path ? path.split('/').pop() : 'document'),
+      size: size || (data ? Math.round(data.length * 0.75) : 0),
+      path: path || null,
+      data: data || null,
+      type: (data && String(data).startsWith('data:application/pdf')) ? 'application/pdf' : 'image/png'
+    };
+  };
+
   return {
     id: row.id,
     userId: row.user_id,
-    aadhaarFront: row.aadhaar_front_path ? {
-      name: row.aadhaar_front_name,
-      size: row.aadhaar_front_size,
-      path: row.aadhaar_front_path,
-    } : null,
-    aadhaarBack: row.aadhaar_back_path ? {
-      name: row.aadhaar_back_name,
-      size: row.aadhaar_back_size,
-      path: row.aadhaar_back_path,
-    } : null,
-    panCard: row.pan_card_path ? {
-      name: row.pan_card_name,
-      size: row.pan_card_size,
-      path: row.pan_card_path,
-    } : null,
-    passbookPhoto: row.passbook_photo_path ? {
-      name: row.passbook_photo_name,
-      size: row.passbook_photo_size,
-      path: row.passbook_photo_path,
-    } : null,
+    aadhaarFront: buildDoc(row.aadhaar_front_path, row.aadhaar_front_name, row.aadhaar_front_size, row.aadhaar_front_data),
+    aadhaarBack: buildDoc(row.aadhaar_back_path, row.aadhaar_back_name, row.aadhaar_back_size, row.aadhaar_back_data),
+    panCard: buildDoc(row.pan_card_path, row.pan_card_name, row.pan_card_size, row.pan_card_data),
+    passbookPhoto: buildDoc(row.passbook_photo_path, row.passbook_photo_name, row.passbook_photo_size, row.passbook_photo_data),
     status: row.status,
     rejectionReason: row.rejection_reason,
     submittedAt: row.submitted_at,
